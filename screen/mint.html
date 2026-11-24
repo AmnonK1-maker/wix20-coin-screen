@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="he">
+<head>
+<meta charset="utf-8">
+<title>Coin Mint v2</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:transparent}
+  body:not(.panel){background:#f0b9eb;display:flex;align-items:center;justify-content:center}
+  canvas{display:block}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script src="/people/people.js"></script>
+<script type="module">
+// v2 mint: a flat, graphic press (drawn in 2D, no camera, no blank fed in). Each cycle the press comes down, lifts,
+// and the struck coin is there on the lower punch; the coin itself is drawn by the wall (one 3D coin, from the die out into the wall).
+import { C, colorFor, drawBackdrop, layout, PRESS, BOX, OX } from './v2-style.js';
+import { MILESTONES } from './milestones.js';
+const Q=new URLSearchParams(location.search), PANEL=Q.has('panel');
+if(PANEL) document.body.classList.add('panel');
+// screen size of the whole office frame; this page covers only the press box
+const FW=+Q.get('fw')||2320, FH=+Q.get('fh')||Math.round(FW*880/2320);
+const L=layout(FW,FH), s=L.s, B=L.box;
+const cv=document.getElementById('c'), x=cv.getContext('2d');
+cv.width=Math.round(B.w); cv.height=Math.round(B.h);
+if(!PANEL){ const k=Math.min(innerWidth/B.w, innerHeight/B.h)*0.9; cv.style.width=B.w*k+'px'; cv.style.height=B.h*k+'px'; }
+const SPEED=+(Q.get('speed')??1);
+
+// press parts, in reference px (absolute frame coords). cx/r: centre + half width; white: x where the lit white side starts;
+// yT/ryT: top edge + top-face ellipse (0 = hidden); yB/ryB: bottom edge + its curve
+const {UP, LOW, OPEN, HIT}=PRESS;
+function part(p, dy=0){
+  const yT=p.yT+dy, yB=p.yB+dy, l=p.cx-p.r, rr=p.cx+p.r;
+  x.beginPath(); x.moveTo(l,yT);
+  if(p.ryT) x.ellipse(p.cx,yT,p.r,p.ryT,0,Math.PI,0,false); else x.lineTo(rr,yT);
+  x.lineTo(rr,yB);
+  if(p.ryB) x.ellipse(p.cx,yB,p.r,p.ryB,0,0,Math.PI,false); else x.lineTo(l,yB);
+  x.closePath(); x.fillStyle=p.col; x.fill();
+  x.save(); x.clip(); x.fillStyle=C.white; x.fillRect(p.white,yT-50,(p.we??rr+2)-p.white,yB-yT+100); x.restore();
+  if(p.ryT){ x.beginPath(); x.ellipse(p.cx,yT,p.r,p.ryT,0,0,Math.PI*2); x.fillStyle=p.top; x.fill(); }
+}
+// one cycle (s): rest up, down, strike, up; the coin shows as the ram clears it, then leaves (wall)
+// the coin is made at the blow (hidden inside the closed punches) and shows as the ram lifts off it
+const T={down:[0.9,1.15], hold:[1.15,1.32], up:[1.32,2.3], appear:1.15, end:+(Q.get('cycle')||6)};
+const sm=t=>t*t*(3-2*t), clamp=(v,a=0,b=1)=>Math.min(b,Math.max(a,v)), seg=(t,a,b)=>clamp((t-a)/(b-a));
+function ramY(t){
+  if(t<T.down[0]) return OPEN;
+  if(t<T.down[1]){ const u=seg(t,...T.down); return OPEN+(HIT-OPEN)*u*u*u; }             // accelerates into the blow
+  if(t<T.hold[1]){ const u=t-T.hold[0]; return HIT-Math.abs(Math.sin(u*60))*2.2*Math.exp(-u*22); }   // a small rebound
+  if(t<T.up[1]) return HIT+(OPEN-HIT)*sm(seg(t,...T.up));
+  return OPEN; }
+function impact(t){   // short white strokes out of the die at the blow
+  const u=(t-T.down[1])/0.22; if(u<0||u>1) return;
+  x.save(); x.strokeStyle=C.white; x.lineCap='round'; x.lineWidth=4; x.globalAlpha=1-u;
+  const cy=452, cx0=208+OX, d=60+u*40, len=26*(1-u*0.5);
+  for(const sx of [-1,1]) for(const a of [-0.45,0,0.45]){ const ca=Math.cos(a), sa=Math.sin(a), x0=cx0+sx*(d)*ca, y0=cy+d*sa*0.6;
+    x.beginPath(); x.moveTo(x0,y0); x.lineTo(x0+sx*len*ca, y0+len*sa*0.6); x.stroke(); }
+  x.restore(); }
+function draw(t){
+  x.setTransform(1,0,0,1,0,0);
+  drawBackdrop(x, cv.width, cv.height, B.x, B.y, FH);   // opaque: the wall's coins never show through the box
+  x.setTransform(s,0,0,s,-B.x,-B.y);
+  const ln=3; x.save(); x.beginPath(); x.rect(BOX.x+ln,BOX.y+ln,BOX.w-2*ln,BOX.h-2*ln); x.clip();
+  for(const p of LOW) part(p);
+  const dy=ramY(t); for(const p of UP) part(p,dy);
+  impact(t);
+  x.restore();
+  x.strokeStyle=C.white; x.lineWidth=ln; x.strokeRect(BOX.x+ln/2,BOX.y+ln/2,BOX.w-ln,BOX.h-ln);
+}
+
+// ---------- the queue: every milestone, with people in between (as before) ----------
+const AIDEMO=Q.has('aifaces'), WATCH=AIDEMO? null : window.watchPeople;
+const DEMO=(AIDEMO? [['Noa Peretz',2014,'r0'],['Ruth Klein',2008,'r2'],['David Mensah',2016,'r3'],['Maya Cohen',2023,'r4'],['Avi Shalom',2007,'r5']] : [['Noa Peretz',2014,'p0'],['Yossi Amar',2019,'p1'],['Ruth Klein',2008,'p2'],['David Mensah',2016,'p3'],['Maya Cohen',2023,'p4'],['Avi Shalom',2007,'p5']])
+  .map(([name,year,f])=>({id:'ph-'+f, name, year, photo:'people/'+f+'.jpg'}));
+let PEOPLE=[], QUEUE=[], qi=0, pi=0, seen=null;
+const personItem=p=>({kind:'person', id:p.id, name:p.name, year:p.year||2026, photo:p.photo});
+function buildQueue(){ const ps=WATCH? PEOPLE : DEMO; QUEUE=[];
+  for(const [year,title] of MILESTONES){ QUEUE.push({kind:'milestone', year, title}); if(ps.length) QUEUE.push(personItem(ps[pi++ % ps.length])); } }
+function onPeopleList(l){ const list=l.filter(p=>p.photo), keys=list.map(p=>p.id+'|'+(p.added||''));
+  if(seen){ const fresh=list.filter((p,i)=>!seen.has(keys[i])); QUEUE.splice(qi,0,...fresh.map(personItem)); }   // a new upload is minted next
+  seen=new Set(keys); PEOPLE=list; }
+if(WATCH) WATCH(onPeopleList, 15000);
+buildQueue();
+function nextItem(){ if(qi>=QUEUE.length){ buildQueue(); qi=0; } return QUEUE[qi++]; }
+
+let t=+(Q.get('t')||0), last=performance.now(), cur=nextItem(), fired=false, frozen=Q.has('t'), n=0;
+function frame(now){
+  const dt=Math.min(0.05,(now-last)/1000)*SPEED; last=now; if(!frozen) t+=dt;
+  if(t>=T.appear && !fired){ fired=true; n++;
+    const it={...cur, color:colorFor(cur.year)};
+    if(parent!==window) parent.postMessage({type:'minted', item:it}, '*'); }
+  if(t>=T.end){ t-=T.end; fired=false; cur=nextItem(); }
+  draw(t); requestAnimationFrame(frame); }
+window.__mint={ dy:()=>ramY(t), state:()=>t+0.001, seek:v=>{ t=v; frozen=true; fired=v>=T.appear; }, play:()=>{ frozen=false; }, T, count:()=>n };
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

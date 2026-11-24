@@ -1,0 +1,577 @@
+<!doctype html>
+<html lang="he">
+<head>
+<meta charset="utf-8">
+<title>Coin Wall v2</title>
+<link href="fonts/fonts.css" rel="stylesheet">
+<style>
+  html,body{margin:0;overflow:hidden;background:transparent}
+  body:not(.embed){background:#f0b9eb}
+  canvas{display:block}
+  #c{opacity:0;transition:opacity 1.2s}
+  body:not(.embed) canvas{width:100vw;height:auto}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script src="/people/people.js"></script>
+<script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
+<script type="module">
+// v2 wall: lit matte-metal coins in the coin colours (soft key light + room reflections, subtle depth of field),
+// on a transparent canvas over the site backdrop.
+// In the office the press box sits over the left: coins behind it are cut out (?hole), and the struck coin is drawn
+// in front of it, from the lower punch out over the frame into the wall.
+import * as THREE from 'three';
+{ const sd=new URLSearchParams(location.search).get('seed'); if(sd){ let x=(+sd||1)>>>0; Math.random=()=>{ x^=x<<13; x>>>=0; x^=x>>>17; x^=x<<5; x>>>=0; return x/4294967296; }; } }
+import { MILESTONES } from './milestones.js';
+import { colorFor, layout, drawBackdrop, PRESS, setCoinColors } from './v2-style.js';
+import { RoomEnvironment } from './vendor/RoomEnvironment.js';
+
+const YEARS = [
+ [2006,'Wix is founded'],[2007,'First employees'],[2008,'First product'],[2009,'Million users'],[2010,'Going global'],[2011,'Moving to the Namal'],
+ [2012,'Moved to HTML5'],[2013,'Going public'],[2014,'First verticals'],[2015,'First Super Bowl ad'],[2016,'Launching ADI'],[2017,'100M users'],
+ [2018,'Business suite'],[2019,'Launching Wix Payments'],[2020,'Covid times'],[2021,'Growing fast'],[2022,'Opening Wix Campus'],[2023,'Wix Studio'],
+ [2024,'New era of AI'],[2025,'Base44 joined Wix'],[2026,'Harmony & Symphony']
+];
+const PLACEHOLDER = [['Noa Peretz',2014,'p0'],['Yossi Amar',2019,'p1'],['Ruth Klein',2008,'p2'],
+                ['David Mensah',2016,'p3'],['Maya Cohen',2023,'p4'],['Avi Shalom',2007,'p5']].map(([name,year,f])=>({id:'ph-'+f, name, year, photo:'people/'+f+'.jpg', placeholder:true}));
+const QP=new URLSearchParams(location.search);
+// ?aifaces: demo people with ready AI relief portraits (people/r*.jpg), instead of the live uploads feed
+const AIDEMO=QP.has('aifaces'), WATCH=AIDEMO? null : window.watchPeople;
+if(AIDEMO) PLACEHOLDER.splice(0,PLACEHOLDER.length, ...[['Noa Peretz',2014,'r0'],['Ruth Klein',2008,'r2'],['David Mensah',2016,'r3'],['Maya Cohen',2023,'r4'],['Avi Shalom',2007,'r5']].map(([name,year,f])=>({id:'ph-'+f, name, year, photo:'people/'+f+'.jpg', depth:['r0','r3','r4'].includes(f)? 'people/'+f+'-depth.jpg' : null, placeholder:true})));
+const LIVE_MAX=Math.max(1,+(QP.get('slots')||10)), PSLOTS=LIVE_MAX+1;
+const ROT_S=+(QP.get('rotate')||120);
+const NY=MILESTONES.length;
+const yIdx=y=>{ const i=YEARS.findIndex(r=>r[0]===y); return i>=0? i : (y && y<YEARS[0][0]? 0 : YEARS.length-1); };
+const CARDS = [...MILESTONES.map(([year,title])=>({kind:'year', yi:yIdx(year), year, title})),
+  ...Array.from({length:PSLOTS},(_,k)=>({kind:'person', slot:k, yi:YEARS.length-1, name:'', year:null, id:null, state:'free', since:0}))];
+const FULL = QP.has('full');
+const W = +QP.get('w') || (FULL? 4640 : 2320), H = +QP.get('h') || (FULL? 1760 : 880);
+if(QP.has('embed')) document.body.classList.add('embed');
+const FONT='"Wix Madefor Display"';
+const LAY=layout(W,H), HOLE=QP.has('hole')? LAY.box : null;
+// ---------- coin geometry: the site's numbers (r 0.5, thickness 0.13, bevel 0.025, dome 0.016, raised ring) ----------
+const R=0.5, T=+(QP.get('thick')||0.095), BEV=0.02, DOME=0.016, RF=R-BEV, HT=T/2, SEG=128;
+const RING_R=0.9*R, RING_T=0.035*R;
+function domeDisc(){
+  const rings=32, pos=[], uv=[], idx=[]; const hz=t=>HT+DOME*(1-t*t);
+  pos.push(0,0,hz(0)); uv.push(0.5,0.5);
+  for(let k=1;k<=rings;k++){ const t=k/rings; for(let s=0;s<SEG;s++){ const a=s/SEG*Math.PI*2, x=Math.cos(a)*RF*t, y=Math.sin(a)*RF*t; pos.push(x,y,hz(t)); uv.push(x/(2*RF)+0.5, y/(2*RF)+0.5); } }
+  for(let s=0;s<SEG;s++) idx.push(0,1+s,1+(s+1)%SEG);
+  for(let k=1;k<rings;k++){ const a0=1+(k-1)*SEG, b0=1+k*SEG; for(let s=0;s<SEG;s++){ const s1=(s+1)%SEG; idx.push(a0+s,b0+s,b0+s1, a0+s,b0+s1,a0+s1); } }
+  const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3)); g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));
+  g.setIndex(idx); g.computeVertexNormals(); return g;
+}
+function rimLathe(){
+  const pts=[], BS=10;
+  for(let i=0;i<=BS;i++){ const a=Math.PI/2*i/BS; pts.push(new THREE.Vector2(RF+BEV*Math.sin(a), -HT+BEV-BEV*Math.cos(a))); }
+  // the straight edge gets extra rows so the reeding band (uv v) is narrow and exact
+  for(let i=1;i<8;i++){ const z=(-HT+BEV)+(2*(HT-BEV))*i/8; pts.push(new THREE.Vector2(R, z)); }
+  for(let i=0;i<=BS;i++){ const a=Math.PI/2*i/BS; pts.push(new THREE.Vector2(R-BEV+BEV*Math.cos(a), HT-BEV+BEV*Math.sin(a))); }
+  const g=new THREE.LatheGeometry(pts,SEG); g.rotateX(Math.PI/2); return g;
+}
+function concat(parts){ // [[geometry, group]] -> one non-indexed geometry with material groups
+  const P=[],N=[],UV=[]; const out=new THREE.BufferGeometry(); let start=0;
+  for(const [g0,grp] of parts){ const g=g0.index? g0.toNonIndexed() : g0;
+    if(!g.attributes.uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count*2),2));
+    P.push(...g.attributes.position.array); N.push(...g.attributes.normal.array); UV.push(...g.attributes.uv.array);
+    const n=g.attributes.position.count; out.addGroup(start,n,grp); start+=n; }
+  out.setAttribute('position',new THREE.Float32BufferAttribute(P,3)); out.setAttribute('normal',new THREE.Float32BufferAttribute(N,3)); out.setAttribute('uv',new THREE.Float32BufferAttribute(UV,2));
+  out.computeBoundingSphere(); return out;
+}
+const ringZ=HT+DOME*(1-(RING_R/RF)**2);
+const ringGeo=()=>new THREE.TorusGeometry(RING_R,RING_T,24,SEG);
+const COIN_GEO=concat([
+  [rimLathe(),0],
+  [ringGeo().translate(0,0,ringZ),3], [ringGeo().translate(0,0,-ringZ),3],
+  [domeDisc(),1], [domeDisc().rotateY(Math.PI),2],
+]);
+
+// ---------- face atlas: per card a front and a back cell. Height -> normal map; frost -> roughness; photo -> albedo ----------
+const CS=+(QP.get('cs')||512), AC=Math.max(8, 2*Math.ceil(Math.sqrt(CARDS.length*2)/2)), AR=Math.ceil(CARDS.length*2/AC);   // near-square: GPUs cap each side at 16384 (8 wide went 21504 tall with 71 milestones)
+const K=CS/512;                                    // the face art below is drawn in a 512 frame (ring at r≈242)
+function arcText(x, text, r, mid, bottom, size, weight=800, track=0.06){
+  x.font=`${weight} ${size}px ${FONT}`; const ch=[...text]; const ws=ch.map(c=>x.measureText(c).width+size*track);
+  const tot=ws.reduce((a,b)=>a+b,0); let a=mid-(bottom?-1:1)*tot/r/2;
+  ch.forEach((c,i)=>{ const da=ws[i]/r*(bottom?-1:1); const am=a+da/2;
+    x.save(); x.rotate(am); x.translate(0, bottom? r : -r);
+    x.textAlign='center'; x.textBaseline= bottom?'top':'alphabetic'; x.fillText(c,0,0); x.restore(); a+=da; });
+}
+function star(x, cx, cy, r){ x.beginPath(); for(let k=0;k<10;k++){ const a=-Math.PI/2+k*Math.PI/5, rr=k%2?r*0.45:r; x.lineTo(cx+Math.cos(a)*rr, cy+Math.sin(a)*rr);} x.fill(); }
+function fitFont(x, text, weight, maxPx, maxW){ let s=maxPx; do{ x.font=`${weight} ${s}px ${FONT}`; s-=2; }while(x.measureText(text).width>maxW && s>10); return s+2; }
+const up=s=>s.toUpperCase();
+// The art follows the 2026-11-24 coin sheet. 512 frame: the face edge is r 256; the raised rim sits just inside it.
+const ARC_TRACK=0.02;
+const arcLen=(x,text,s,w,track)=>{ x.font=`${w} ${s}px ${FONT}`; return [...text].reduce((a,c)=>a+x.measureText(c).width+s*track,0); };
+function starsSide(x){ for(const sx of [-1,1]) for(let k=-2;k<=2;k++){ const a=Math.PI/2*(1-sx)+k*0.205*sx, r=208; star(x, sx*Math.abs(Math.cos(k*0.205))*r, Math.sin(k*0.205)*r*1.0-10, 11.5); } }
+function personArt(x, c){   // name round the top, WIX at both sides, the start year at the bottom; the portrait is drawn by the shader
+  const name=up(c.name||''); let sz=58; while(sz>26 && arcLen(x,name,sz,600,ARC_TRACK)/182>2.35) sz-=2;
+  arcText(x, name, 182, 0, false, sz, 600, ARC_TRACK);
+  x.textAlign='center'; x.textBaseline='middle'; x.font=`700 24px ${FONT}`;
+  if(QP.has('celebrate')){   // ?celebrate (the per-employee GIF): the year at both sides, "CELEBRATING 20 YEARS OF WIX" round the bottom
+    if(c.year){ x.font=`700 26px ${FONT}`; x.fillText(String(c.year),-196,12); x.fillText(String(c.year),196,12); }
+    arcText(x, 'CELEBRATING 20 YEARS OF WIX', 190, 0, true, 26, 600, 0.04); return; }
+  x.fillText('WIX',-203,12); x.fillText('WIX',203,12);
+  if(c.year){ x.font=`600 56px ${FONT}`; x.fillText(String(c.year),0,196); }   // clear of the raised rim (ring inner edge ≈ r 233)
+}
+function wrapLines(x, text, w, size){ x.font=`600 ${size}px ${FONT}`; const out=[]; let line='';
+  for(const word of text.split(' ')){ const t=line? line+' '+word : word; if(x.measureText(t).width>w && line){ out.push(line); line=word; } else line=t; }
+  if(line) out.push(line); return out; }
+function milestoneArt(x, c){   // WIX on top, the year big, the event under it, stars both sides, "20 YEARS OF WIX" round the bottom
+  const year=String(YEARS[c.yi][0]), title=up(c.title||YEARS[c.yi][1]);
+  x.textAlign='center'; x.textBaseline='middle';
+  x.font=`700 38px ${FONT}`; x.fillText('WIX',0,-208);
+  const ys=fitFont(x,year,500,136,300); x.font=`500 ${ys}px ${FONT}`; x.fillText(year,0,-34);
+  let ts=32, L=wrapLines(x,title,250,ts); while(L.length>3 && ts>20){ ts-=2; L=wrapLines(x,title,270,ts); }
+  x.font=`600 ${ts}px ${FONT}`; L.forEach((l,i)=>x.fillText(l,0,58+i*ts*1.15));
+  starsSide(x);
+  arcText(x, '20 YEARS OF WIX', 186, 0, true, 24, 600, 0.04);
+}
+function backArt(x){   // the other side of every coin: GO TO / 20 / YEARS OF WIX / WIXTIMELINE.COM
+  x.textAlign='center'; x.textBaseline='middle';
+  arcText(x, 'GO TO', 206, 0, false, 24, 600, 0.06);
+  x.font=`500 262px ${FONT}`; x.fillText('20',0,-14);
+  x.font=`600 32px ${FONT}`; x.fillText('YEARS OF WIX',0,104);
+  starsSide(x);
+  arcText(x, 'WIXTIMELINE.COM', 183, 0, true, 33, 600, 0.03);
+}
+const normCv=document.createElement('canvas'), roughCv=document.createElement('canvas'), albCv=document.createElement('canvas');
+for(const c of [normCv,roughCv,albCv]){ c.width=CS*AC; c.height=CS*AR; }
+const ROUGH_FIELD=0.22, ROUGH_FROST=0.55, NSTR=10;
+function blurWrap(a, S, r){ const t=new Float32Array(S*S);
+  for(let y=0;y<S;y++) for(let x=0;x<S;x++){ let v=0; for(let k=-r;k<=r;k++) v+=a[y*S+((x+k+S)%S)]; t[y*S+x]=v; }
+  for(let y=0;y<S;y++) for(let x=0;x<S;x++){ let v=0; for(let k=-r;k<=r;k++) v+=t[((y+k+S)%S)*S+x]; a[y*S+x]=v; } return a; }
+function unitVar(a){ let m=0,v=0; for(const x of a) m+=x; m/=a.length; for(const x of a) v+=(x-m)**2; v=Math.sqrt(v/a.length)||1; for(let i=0;i<a.length;i++) a[i]=(a[i]-m)/v; return a; }
+// ?grain=fineBlur,fineMix,coarseMix — fine grain wider than a screen pixel shimmers less
+const GRN=(new URLSearchParams(location.search).get('grain')||'2,0.9,0.25').split(',').map(Number); GRN[0]=Math.max(1,Math.round(GRN[0]));
+function makeGrain(S){
+  const f=unitVar(blurWrap(Float32Array.from({length:S*S},()=>Math.random()-0.5), S, GRN[0]));
+  const c=unitVar(blurWrap(Float32Array.from({length:S*S},()=>Math.random()-0.5), S, 4*Math.max(1,GRN[0]/1.5)|0));
+  return f.map((v,i)=>v*GRN[1]+c[i]*GRN[2]);
+}
+const GRAIN=makeGrain(CS);
+const GK=+(QP.get('grit')??0.25), G_FIELD=0.009*GK, G_RELIEF=0.018*GK, G_ROUGH=0.05*GK;   // satin: a quarter of the old grain   // bump height (relief = 1) and roughness jitter
+function scratches(x, ox, oy){  // hairline wear: random scuffs + faint circular polishing marks, written into roughness (G)
+  x.save(); x.globalCompositeOperation='lighter'; x.beginPath(); x.rect(ox,oy,CS,CS); x.clip(); x.translate(ox+CS/2, oy+CS/2); x.lineCap='round';
+  for(let k=0;k<260;k++){ const a=Math.random()*6.28, r=Math.random()*CS*0.47, l=10+Math.random()*90, b=Math.random()*6.28;
+    x.strokeStyle=`rgba(0,${(0.03+Math.random()*0.05)*255|0},0,1)`; x.lineWidth=0.6+Math.random()*1.1;
+    x.beginPath(); x.moveTo(Math.cos(a)*r, Math.sin(a)*r); x.lineTo(Math.cos(a)*r+Math.cos(b)*l, Math.sin(a)*r+Math.sin(b)*l); x.stroke(); }
+  for(let k=0;k<70;k++){ const r=Math.random()*CS*0.47, a=Math.random()*6.28;
+    x.strokeStyle=`rgba(0,${(0.03+Math.random()*0.05)*255|0},0,1)`; x.lineWidth=0.8; x.beginPath(); x.arc(0,0,r,a,a+0.3+Math.random()*1.2); x.stroke(); }
+  // soft smudges: a few broad patches a touch hazier
+  for(let k=0;k<5;k++){ const g=x.createRadialGradient(0,0,0,0,0,1); g.addColorStop(0,'rgb(0,18,0)'); g.addColorStop(1,'rgb(0,0,0)');
+    x.save(); x.translate((Math.random()-0.5)*CS*0.7,(Math.random()-0.5)*CS*0.7); x.scale(60+Math.random()*120, 40+Math.random()*90); x.fillStyle=g; x.beginPath(); x.arc(0,0,1,0,7); x.fill(); x.restore(); }
+  x.restore();
+}
+let nx, rx, ax, hx, px;
+async function buildFaces(imgs){
+  nx=normCv.getContext('2d'); rx=roughCv.getContext('2d'); ax=albCv.getContext('2d');
+  nx.fillStyle='rgb(128,128,255)'; nx.fillRect(0,0,normCv.width,normCv.height);
+  rx.fillStyle=`rgb(0,${ROUGH_FIELD*255|0},0)`; rx.fillRect(0,0,roughCv.width,roughCv.height);
+  ax.fillStyle='#fff'; ax.fillRect(0,0,albCv.width,albCv.height);
+  const hc=document.createElement('canvas'); hc.width=hc.height=CS; hx=hc.getContext('2d',{willReadFrequently:true});
+  const pc=document.createElement('canvas'); pc.width=pc.height=CS; px=pc.getContext('2d',{willReadFrequently:true});
+  const all=[]; for(let i=0;i<CARDS.length;i++){ all.push(drawCard(i, imgs[i], [0,1])); do await new Promise(r=>setTimeout(r,0)); while(faceJobs.size>=FW_N*2); }   // keep a few faces in flight, not all (memory)
+  await Promise.all(all);
+}
+// The per-pixel maths of a face (bump normals, roughness, crevice toning) runs in a few background workers, in parallel:
+// drawing the whole wall on the page itself froze it (and the mint beside it in the office) for ~20 s at start.
+const FACE_WORKER=`let G=null;
+onmessage=e=>{ const m=e.data; if(m.grain){ G=m.grain; return; }
+  const {id,CS,hd,photo,sh,K}=m, NN=CS*CS, h=new Float32Array(NN);
+  for(let p=0;p<NN;p++) h[p]=hd[p*4]/255;
+  const h0=h.slice();
+  // portrait: shade = photo / its background grey (background = no change), faded out at the edge of its circle; a little of it is bump too
+  const PS=photo? new Float32Array(NN).fill(1) : null;
+  if(photo){ const {cx,cy,r,bg,bump,depth,dk,shade}=m.pc; for(let y=0;y<CS;y++) for(let x=0;x<CS;x++){ const p=y*CS+x, dd=Math.hypot(x-cx,y-cy); if(dd>=r) continue;
+      const fade=1-Math.min(1,Math.max(0,(dd-r*0.82)/(r*0.18))), sf=fade*fade*(3-2*fade), f=Math.min(1.9,Math.max(0.3,(photo[p*4]/255)/bg)), k=(f-1)*sf;
+      if(depth){ PS[p]=1+k*shade; h[p]+=(depth[p]/255)*dk*sf; }   // real height from the AI height map; the sculpture's own light only softly
+      else { PS[p]=1+k; h[p]+=k*bump; } } }
+  for(let p=0, g=sh%NN; p<NN; p++, g++){ if(g>=NN) g-=NN; const f=Math.min(1,h0[p]*1.6); h[p]+=G[g]*(K.G_FIELD+(K.G_RELIEF-K.G_FIELD)*f); }
+  const N=new Uint8ClampedArray(NN*4), R=new Uint8ClampedArray(NN*4), A=new Uint8ClampedArray(NN*4), sh7=(sh*7)%NN;
+  for(let y=0;y<CS;y++){ const y0=Math.max(0,y-1), y1=Math.min(CS-1,y+1);
+    for(let x=0;x<CS;x++){ const x0=Math.max(0,x-1), x1=Math.min(CS-1,x+1), p=y*CS+x, q=p*4;
+      const dx=(h[y*CS+x1]-h[y*CS+x0])*0.5, dy=(h[y0*CS+x]-h[y1*CS+x])*0.5;
+      const ex=-dx*K.NSTR, ey=-dy*K.NSTR, l=Math.sqrt(ex*ex+ey*ey+1);
+      N[q]=(ex/l*0.5+0.5)*255; N[q+1]=(ey/l*0.5+0.5)*255; N[q+2]=(1/l*0.5+0.5)*255; N[q+3]=255;
+      const f=Math.min(1,h0[p]*1.6); let g=p+sh7; if(g>=NN) g-=NN;
+      R[q+1]=(K.ROUGH_FIELD+(K.ROUGH_FROST-K.ROUGH_FIELD)*f + G[g]*K.G_ROUGH)*255; R[q+2]=Math.min(1,h0[p]*2.2)*255; R[q+3]=255;
+      const tx=h0[y*CS+x1]-h0[y*CS+x0], ty=h0[y0*CS+x]-h0[y1*CS+x], T=Math.sqrt(tx*tx+ty*ty)*0.5*K.NSTR, sl=T/Math.sqrt(T*T+1);
+      let v=0.5*(1-Math.min(0.55,sl*0.9))*(PS? PS[p] : 1)*255;   // 0.5 = the plain colour (the shader doubles it)
+      A[q]=A[q+1]=A[q+2]=v; A[q+3]=255; } }
+  postMessage({id,N,R,A},[N.buffer,R.buffer,A.buffer]); };`;
+const FW_N=Math.max(1,Math.min(4,(navigator.hardwareConcurrency||4)-1));
+const faceWorkers=Array.from({length:FW_N},()=>{ const w=new Worker(URL.createObjectURL(new Blob([FACE_WORKER],{type:'text/javascript'}))); w.postMessage({grain:GRAIN}); w.busy=0; return w; });
+const faceJobs=new Map(); let faceJobId=0;
+faceWorkers.forEach(w=>w.onmessage=e=>{ const j=faceJobs.get(e.data.id); faceJobs.delete(e.data.id); w.busy--; j(e.data); });
+const FACE_K={G_FIELD, G_RELIEF, G_ROUGH, ROUGH_FIELD, ROUGH_FROST, NSTR};
+function faceJob(hd, photo, sh, pc){ const w=faceWorkers.reduce((a,b)=>b.busy<a.busy?b:a); w.busy++; const id=++faceJobId;
+  return new Promise(res=>{ faceJobs.set(id,res); const tr=[hd.buffer]; if(photo) tr.push(photo.buffer); if(pc?.depth) tr.push(pc.depth.buffer);
+    w.postMessage({id, CS, hd, photo, sh, pc, K:FACE_K}, tr); }); }
+// draws the art on the page (canvas text, blur), hands the pixel maths to a worker; resolves once the cell is in the atlas
+let artX=null;
+function drawCard(i, img, sides){ const c=CARDS[i]; const jobs=[];
+  if(!artX){ const a=document.createElement('canvas'); a.width=a.height=CS; artX=a.getContext('2d'); }
+  for(const side of sides){
+    const cell=i*2+side, ox=(cell%AC)*CS, oy=Math.floor(cell/AC)*CS;
+    // height: relief art in white on black, softened so the shoulders read as a struck bevel
+    // drawn sharp, then blurred once (a blur filter left on while drawing re-blurs the whole face for every letter: ~0.4 s a face)
+    artX.setTransform(1,0,0,1,0,0); artX.filter='none'; artX.fillStyle='#000'; artX.fillRect(0,0,CS,CS);
+    artX.translate(CS/2,CS/2); artX.scale(K,K); artX.fillStyle='#fff'; artX.strokeStyle='#fff';
+    side? backArt(artX) : c.kind==='person'? personArt(artX,c) : milestoneArt(artX,c);
+    artX.setTransform(1,0,0,1,0,0);
+    hx.setTransform(1,0,0,1,0,0); hx.filter='none'; hx.fillStyle='#000'; hx.fillRect(0,0,CS,CS);
+    hx.filter=`blur(${1.1*K}px)`; hx.drawImage(artX.canvas,0,0); hx.filter='none';
+    let photo=null, pc=null;
+    if(!side && c.kind==='person' && img){
+      // portrait: the AI bas-relief (or the plain photo), in a soft circle between the name and the year
+      const pr=CS*0.335, cy=CS/2+CS*0.008, im=img, s=pr*(+(QP.get('pscale')||1.9)), k=Math.max(s/im.width,s/im.height);   // the whole bust fits above the year
+      const t=document.createElement('canvas'); t.width=t.height=8; const tx=t.getContext('2d'); tx.drawImage(im,0,0,8,8);
+      const cd=tx.getImageData(0,0,8,8).data, lum=i=>(cd[i]*0.3+cd[i+1]*0.59+cd[i+2]*0.11)/255;
+      const bg=Math.max(0.15,[0,7*4,56*4,63*4].map(lum).sort((a,b)=>a-b).slice(1,3).reduce((a,b)=>a+b)/2);   // its background grey (corners)
+      const g=Math.round(bg*255); px.setTransform(1,0,0,1,0,0); px.fillStyle='#000'; px.fillRect(0,0,CS,CS);
+      px.save(); px.beginPath(); px.arc(CS/2,cy,pr,0,7); px.clip(); px.fillStyle=`rgb(${g},${g},${g})`; px.fillRect(0,0,CS,CS);   // around the picture = its own grey = plain coin
+      px.filter='grayscale(1)'; px.drawImage(im, CS/2-im.width*k/2, cy-pr*0.06-im.height*k/2, im.width*k, im.height*k); px.restore(); px.filter='none';
+      photo=px.getImageData(0,0,CS,CS).data; pc={cx:CS/2, cy, r:pr, bg, bump:+(QP.get('pbump')??0.7)};
+      if(im.__depth){ const dm=im.__depth; px.fillStyle='#000'; px.fillRect(0,0,CS,CS); px.save(); px.beginPath(); px.arc(CS/2,cy,pr,0,7); px.clip(); px.filter='grayscale(1)';
+        px.drawImage(dm, CS/2-im.width*k/2, cy-pr*0.06-im.height*k/2, im.width*k, im.height*k); px.restore(); px.filter='none';   // same place and size as the picture
+        const dd=px.getImageData(0,0,CS,CS).data, D=new Uint8Array(CS*CS); for(let q=0;q<CS*CS;q++) D[q]=dd[q*4];
+        pc.depth=D; pc.dk=+(QP.get('dk')||6); pc.shade=+(QP.get('pshade')??0.5); pc.bump=0; }
+    }
+    const hd=hx.getImageData(0,0,CS,CS).data;
+    const sh=(Math.random()*CS|0)*CS+(Math.random()*CS|0);  // each face gets its own patch of grain
+    jobs.push(faceJob(hd, photo, sh, pc).then(r=>{
+      nx.putImageData(new ImageData(r.N,CS,CS),ox,oy); rx.putImageData(new ImageData(r.R,CS,CS),ox,oy); scratches(rx,ox,oy);
+      ax.putImageData(new ImageData(r.A,CS,CS),ox,oy); }));
+  }
+  return Promise.all(jobs);
+}
+// copy one atlas cell to the GPU (sub-image + mipmaps) — no full re-upload, so the screen doesn't hitch
+const cellCvs=[0,1,2].map(()=>{ const c=document.createElement('canvas'); c.width=c.height=CS; return c; });
+function uploadCell(cell){
+  const ox=(cell%AC)*CS, row=Math.floor(cell/AC), oy=row*CS, pos=new THREE.Vector2(ox,(AR-row-1)*CS);
+  const dst=[MATS[0][1].normalMap, MATS[0][1].roughnessMap, MATS[0][1].map];   // any clone: they share one GPU texture
+  [normCv,roughCv,albCv].forEach((cv,j)=>{ const s=cellCvs[j], x=s.getContext('2d'); x.clearRect(0,0,CS,CS); x.drawImage(cv,ox,oy,CS,CS,0,0,CS,CS);
+    renderer.copyTextureToTexture(new THREE.Texture(s), dst[j], null, pos); });
+}
+
+// ---------- renderer / scene ----------
+const cv=document.getElementById('c');
+const renderer=new THREE.WebGLRenderer({canvas:cv, antialias:true, alpha:true, preserveDrawingBuffer:true});
+renderer.setPixelRatio(1); renderer.setSize(W,H,false); renderer.setClearColor(0x000000,0);
+renderer.outputColorSpace=THREE.SRGBColorSpace; renderer.toneMapping=THREE.NeutralToneMapping; renderer.toneMappingExposure=+(QP.get('exp')||0.92);
+if(!QP.has('embed')){ const b=document.createElement('canvas'); b.width=W; b.height=H; drawBackdrop(b.getContext('2d'),W,H); document.body.style.background=`url(${b.toDataURL()}) 0 0/100% auto no-repeat`; }
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(30, W/H, 0.1, 100);
+
+// ---------- light: one soft key from the top left, a little fill, and a room's reflections ----------
+const pmrem=new THREE.PMREMGenerator(renderer);
+scene.environment=pmrem.fromScene(new RoomEnvironment(),0.04).texture; scene.environmentIntensity=+(QP.get('env')||0.75);
+const key=new THREE.DirectionalLight(0xffffff,+(QP.get('key')||1.7)); key.position.set(-4,5,6); scene.add(key);
+const fill=new THREE.DirectionalLight(0xffffff,0.5); fill.position.set(5,-2,4); scene.add(fill);
+// ---------- materials: matte metal in the coin colour; the raised art a touch lighter (?lt); reeded edge ----------
+let normT, roughT, albT; const MATS=[];
+const LT=+(QP.get('lt')??0.18), METAL=+(QP.get('metal')??0.45), ROUGH=+(QP.get('rough')??1.3);   // a little shinier (2026-11-24)
+const RS=512, RG=makeGrain(RS);
+function grainTex(ridged){
+  const nC=document.createElement('canvas'), rC=document.createElement('canvas'); nC.width=nC.height=rC.width=rC.height=RS;
+  const nd=nC.getContext('2d').createImageData(RS,RS), rd=rC.getContext('2d').createImageData(RS,RS);
+  const NP=2*11+7, v0=10/(NP-1), v1=18/(NP-1);
+  for(let y=0;y<RS;y++){ const v=1-y/(RS-1); const m=ridged? Math.min(1,Math.max(0,Math.min(v-v0,v1-v)/0.012)) : 0;
+    for(let i=0;i<RS;i++){ const p=y*RS+i, q=p*4, a=i/RS*Math.PI*2*16;
+      const gx=(RG[y*RS+(i+1)%RS]-RG[y*RS+(i+RS-1)%RS])*0.5, gy=(RG[((y+RS-1)%RS)*RS+i]-RG[((y+1)%RS)*RS+i])*0.5;
+      let ex=Math.sin(a)*0.75*m - gx*0.16, ey=-gy*0.16, ez=1; const l=Math.hypot(ex,ey,ez);
+      nd.data[q]=(ex/l*0.5+0.5)*255; nd.data[q+1]=(ey/l*0.5+0.5)*255; nd.data[q+2]=(ez/l*0.5+0.5)*255; nd.data[q+3]=255;
+      rd.data[q+1]=(0.36+RG[p]*0.07)*255; rd.data[q+3]=255; } }
+  nC.getContext('2d').putImageData(nd,0,0); rC.getContext('2d').putImageData(rd,0,0);
+  const n=new THREE.CanvasTexture(nC), r=new THREE.CanvasTexture(rC);
+  for(const t of [n,r]){ t.wrapS=t.wrapT=THREE.RepeatWrapping; t.anisotropy=8; t.colorSpace=THREE.NoColorSpace; }
+  return [n,r];
+}
+const [reedT, reedR]=grainTex(true); reedT.repeat.set(10,1); reedR.repeat.set(10,1);
+function cellTex(base, cell){ const t=base.clone(); t.repeat.set(1/AC,1/AR); t.offset.set((cell%AC)/AC, 1-(Math.floor(cell/AC)+1)/AR); t.needsUpdate=false; return t; }
+function faceHook(m){ m.onBeforeCompile=sh=>{ sh.uniforms.uRelief=m.userData.relief;
+    sh.fragmentShader='uniform vec3 uRelief;\n'+sh.fragmentShader.replace('#include <map_fragment>',`
+  { float A=texture2D(map,vMapUv).r*2.0, mk=smoothstep(0.38,0.7,texture2D(roughnessMap,vRoughnessMapUv).b);
+    diffuseColor.rgb=mix(diffuse,uRelief,mk)*A; }`); };
+  m.customProgramCacheKey=()=>'v2face'; return m; }
+const lift=(c,k)=>c.clone().lerp(new THREE.Color(1,1,1),k);
+const cardColor=c=>new THREE.Color(colorFor(c.kind==='year'? c.year : c.year||2026));
+function setCardMat(i){ const col=cardColor(CARDS[i]); const [rim,f0,f1,ring]=MATS[i];
+  for(const m of [rim,f0,f1,ring]) m.color.copy(col);
+  for(const f of [f0,f1]) f.userData.relief.value.copy(lift(col,LT)); }
+function makeMaterials(){
+  CARDS.forEach((c,i)=>{
+    const common={ color:new THREE.Color(), metalness:METAL, roughness:ROUGH };
+    const rim=new THREE.MeshStandardMaterial({...common, normalMap:reedT, roughnessMap:reedR});
+    const ring=new THREE.MeshStandardMaterial({...common, roughness:0.55});
+    const face=cell=>faceHook(Object.assign(new THREE.MeshStandardMaterial({...common, normalMap:cellTex(normT,cell), roughnessMap:cellTex(roughT,cell), map:cellTex(albT,cell)}),
+      {userData:{relief:{value:new THREE.Color()}}}));
+    MATS.push([rim, face(i*2), face(i*2+1), ring]); setCardMat(i); }); }
+addEventListener('message', e=>{ if(e.data?.type==='colors' && Array.isArray(e.data.list)){ setCoinColors(e.data.list); if(MATS.length) CARDS.forEach((c,i)=>setCardMat(i)); } });
+
+// ---------- subtle depth of field on the wall (?ap = aperture, ?focus = in-focus distance past the nearest coins) ----------
+const rt=new THREE.WebGLRenderTarget(W,H,{type:THREE.HalfFloatType, samples:Math.min(4,renderer.capabilities.maxSamples), depthTexture:new THREE.DepthTexture(W,H)});
+const rt2=new THREE.WebGLRenderTarget(W,H,{type:THREE.HalfFloatType});
+const dofCam=new THREE.OrthographicCamera(-1,1,1,-1,0,1), dofScene=new THREE.Scene();
+const DOFU={ tDepth:{value:rt.depthTexture}, focus:{value:10}, aperture:{value:+(QP.get('ap')??0.3)}, near:{value:camera.near}, far:{value:camera.far}, pxScale:{value:H/880}, res:{value:new THREE.Vector2(W,H)} };
+const QVS=`varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.,1.); }`;
+const COC=`float dist(vec2 uv){ return -perspectiveDepthToViewZ(texture2D(tDepth,uv).x, near, far); }
+  float coc(float d){ return min(MAXR, aperture*42.0*pxScale*abs(d-focus)/d); }`;
+const dofMat=new THREE.ShaderMaterial({ uniforms:{...DOFU, tColor:{value:rt.texture}}, vertexShader:QVS,
+  fragmentShader:`#include <packing>
+  varying vec2 vUv; uniform sampler2D tColor, tDepth; uniform float focus, aperture, near, far, pxScale; uniform vec2 res;
+  ${COC}
+  void main(){ float d0=dist(vUv), c0=coc(d0); vec4 acc=texture2D(tColor,vUv); float ws=1.0;
+    if(aperture>0.001){ float rot=fract(52.9829189*fract(dot(gl_FragCoord.xy, vec2(0.06711056,0.00583715))))*6.2831853;
+      for(int i=0;i<TAPS;i++){ float fi=float(i)+0.5, r=sqrt(fi/float(TAPS))*MAXR, a=fi*2.39996323+rot; vec2 uv=vUv+vec2(cos(a),sin(a))*r/res;
+        float dt=dist(uv), ct=coc(dt); if(dt>d0) ct=min(ct,c0); float w=clamp(ct-r+1.0,0.0,1.0); acc+=texture2D(tColor,uv)*w; ws+=w; } }
+    gl_FragColor=acc/ws; }`,   // premultiplied colour + coverage
+  defines:{TAPS:48, MAXR:(14*H/880).toFixed(1)}, depthTest:false, depthWrite:false, blending:THREE.NoBlending });
+const finMat=new THREE.ShaderMaterial({ uniforms:{...DOFU, tColor:{value:rt2.texture}}, vertexShader:QVS,
+  fragmentShader:`#include <packing>
+  varying vec2 vUv; uniform sampler2D tColor, tDepth; uniform float focus, aperture, near, far, pxScale; uniform vec2 res;
+  ${COC}
+  void main(){ vec4 c=texture2D(tColor,vUv); float s=clamp(coc(dist(vUv))*0.5,0.0,2.5); vec4 acc=c; float n=1.0;
+    if(s>0.3){ for(int i=0;i<8;i++){ float a=float(i)*0.785398; vec2 uv=vUv+vec2(cos(a),sin(a))*s/res; float w=clamp(coc(dist(uv))*0.5-0.2,0.0,1.0); acc+=texture2D(tColor,uv)*w; n+=w; } }
+    acc/=n; float cov=clamp(acc.a,0.0,1.0);
+    gl_FragColor=vec4(acc.rgb/max(cov,1e-4),1.0);
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
+    gl_FragColor=vec4(gl_FragColor.rgb*cov,cov); }`,
+  defines:{MAXR:(14*H/880).toFixed(1)}, depthTest:false, depthWrite:false, blending:THREE.NoBlending });
+const quad=new THREE.Mesh(new THREE.PlaneGeometry(2,2), dofMat); dofScene.add(quad);
+
+// ---------- coins ----------
+const coins=[]; let hero=null; window.__coins=coins;
+const rnd=(a,b)=>a+Math.random()*(b-a);
+const tmpQ=new THREE.Quaternion(), tmpV=new THREE.Vector3(), V=(x,y,z)=>new THREE.Vector3(x,y,z);
+function halfW(z){ return Math.tan(THREE.MathUtils.degToRad(15))*z*camera.aspect; }
+function halfH(z){ return Math.tan(THREE.MathUtils.degToRad(15))*z; }
+const fromPx=(px,py,d)=>V((px/W*2-1)*halfW(d), -(py/H*2-1)*halfH(d), d);   // screen px + distance -> (x, y, d)
+const toPx=(x,y,d)=>[(x/halfW(d)+1)*W/2, (1-y/halfH(d))*H/2];
+// coin size cap: the nearest coin is at most ?big x the struck coin (default 1.5), so the press keeps its scale
+const DMIN=D0()/(+(QP.get('big')||1.5)), DSPAN=+(QP.get('span')||14);
+function D0(){ return 0.5*(H/2)/(LAY.die.coinR*Math.tan(THREE.MathUtils.degToRad(15))); }
+const pxR=d=>0.5/halfH(d)*H/2;
+const DIR=-1;   // the wall flows right to left (the press is on the right since the 2026-11-24 frame)   // coin radius on screen at distance d
+function makeCoin(card, opts={}){
+  const m=new THREE.Mesh(COIN_GEO, MATS[card]); scene.add(m);
+  const d=opts.d ?? DMIN+Math.pow(Math.random(),0.8)*DSPAN;
+  const c={ mesh:m, card, d, x: opts.x ?? rnd(-1.1,1.1)*halfW(d), y: opts.y ?? rnd(-1.15,1.15)*halfH(d),
+    vx: opts.vx ?? DIR*rnd(0.15,0.35), vy: opts.vy ?? rnd(-0.06,0.06), g: opts.g ?? 0,
+    w: new THREE.Vector3(rnd(-1,1),rnd(-1,1),rnd(-1,1)).normalize().multiplyScalar(rnd(0.5,1.5)),
+    vx0: DIR*rnd(0.15,0.35), vd: 0, prec: rnd(0.2,0.6), ph: Math.random()*6.28, thrown: !!opts.thrown };
+  m.quaternion.setFromEuler(new THREE.Euler(rnd(0,6.28),rnd(0,6.28),rnd(0,6.28)));
+  return c;
+}
+function respawn(c){
+  if(CARDS[c.card].kind==='year' && personCards('live').length && coins.filter(o=>CARDS[o.card].kind==='person').length<coins.length*0.4){ const k=fairPersonCard(-1); c.card=k; c.mesh.material=MATS[k]; }
+  else if(CARDS[c.card].kind==='person'){ const k=fairPersonCard(c.card); if(k!==c.card){ c.card=k; c.mesh.material=MATS[k]; } }
+  c.d=DMIN+Math.pow(Math.random(),0.8)*DSPAN; c.x=-DIR*(halfW(c.d)+0.8); c.y=rnd(-1.1,1.1)*halfH(c.d); c.vx=c.vx0=DIR*rnd(0.15,0.35); c.vy=rnd(-0.06,0.06); c.g=0; c.vd=0; c.thrown=false; }
+const BR=0.505, BD=2*BR;
+function collide(){
+  for(let it=0; it<2; it++) for(let i=0;i<coins.length;i++){ const a=coins[i]; if(a.script) continue;
+    for(let j=i+1;j<coins.length;j++){ const b=coins[j]; if(b.script) continue;
+      const dx=a.x-b.x, dy=a.y-b.y, dz=a.d-b.d; if(Math.abs(dx)>BD||Math.abs(dy)>BD||Math.abs(dz)>BD) continue;
+      const l2=dx*dx+dy*dy+dz*dz; if(l2>=BD*BD) continue;
+      const l=Math.sqrt(l2)||1e-4, nx=dx/l, ny=dy/l, nz=dz/l, push=(BD-l)/2;
+      a.x+=nx*push; a.y+=ny*push; a.d+=nz*push; b.x-=nx*push; b.y-=ny*push; b.d-=nz*push;
+      if(it) continue;
+      const rv=(a.vx-b.vx)*nx+(a.vy-b.vy)*ny+(a.vd-b.vd)*nz;
+      if(rv<0){ const k=-rv*0.9;
+        a.vx+=nx*k; a.vy+=ny*k; a.vd+=nz*k; b.vx-=nx*k; b.vy-=ny*k; b.vd-=nz*k;
+        a.w.add(new THREE.Vector3(-ny,nx,nz).multiplyScalar(k*2)); b.w.add(new THREE.Vector3(ny,-nx,-nz).multiplyScalar(k*2));
+        for(const c of [a,b]){ const L=c.w.length(); if(L>3) c.w.multiplyScalar(3/L); } } } }
+}
+function separateAll(){ for(let k=0;k<40;k++) collide(); }
+
+// ---------- the struck coin ----------
+// Made at the blow, inside the closed punches (the ram's shape is cut out of the front layer, so the coin shows as the
+// ram lifts off it). Then, each move eased in and out: it comes out to a spot just left of the press (it may cover a
+// little of it), stops facing us, turns over to show its back, holds, and only then glides off to its place in the wall.
+// Spot, timing, turn direction and destination vary a little every time.
+const P=(lo,hi)=>lo+Math.random()*(hi-lo), sgn=()=>Math.random()<0.5?-1:1;
+const ease=u=>{ u=Math.min(1,Math.max(0,u)); return u*u*u*(u*(u*6-15)+10); };         // smootherstep: soft start and stop
+const sig=(u,p)=>{ u=Math.min(1,Math.max(0,u)); const a=u**p; return a/(a+(1-u)**p); };          // strong ease in AND out (p 3 = long, soft ends)
+const settle=u=>{ u=Math.min(1,Math.max(0,u)); const s=u*u*(3-2*u); return 1-(1-s)**4; };          // soft start, long slow stop
+function coinH(){ return T/0.5*LAY.die.coinR; }                                    // coin thickness on screen at the punch
+function strikePlan(){ const s=LAY.s, bx=LAY.box.x, D=D0(), k=+(QP.get('present')||2.35), Dp=D/k, Rp=0.5/halfH(Dp)*H/2;   // always the same size
+  const upMin=(PRESS.UP[1].yB+PRESS.OPEN+14)*s;                                       // keep clear of the raised ram
+  const p0=[LAY.die.x, LAY.die.y-coinH()/2], p1=[bx-Rp*(+(QP.get('over')||0.3)), Math.max(upMin+Rp, LAY.die.y-45*s)];   // one fixed spot, a good part of it over the box
+  const p2=[P(W*0.48,W*0.7), P(H*0.28,H*0.72)];   // joins the wall near the middle, not far off (it read as running away)
+  const tr=0.95, tb=tr+1.6, tc=tb+P(0.2,0.4), td=tc+P(1.1,1.3), te=td+P(0.5,0.7), tf=te+P(2.0,2.4);
+  return { p0, p1, p2, D, Dp, d2:DMIN+P(1,4.5), tr, tb, tc, td, te, tf, turn:sgn()*Math.PI, lift:20*s,
+    a2:P(30,150), b2:sgn()*P(0.8,2.2), r2:P(-1,1), ph:Math.random()*6.28, k2:0.35 }; }
+// pose at time t -> [px, py, d, a (face tilt toward us, deg; 0 = lying flat), b (turn about screen-up), roll]
+function planAt(L, t){
+  if(t<L.tr) return [...L.p0, L.D, 9, 0, 0];
+  if(t<L.tb){ const u=settle((t-L.tr)/(L.tb-L.tr)), ux=settle(Math.min(1,(t-L.tr)/(L.tb-L.tr)*1.15));   // a touch ahead in x: out first, not up into the ram
+    const x=L.p0[0]+(L.p1[0]-L.p0[0])*ux, y=L.p0[1]+(L.p1[1]-L.p0[1])*u-Math.sin(u*Math.PI)*L.lift;
+    return [x, y, L.D+(L.Dp-L.D)*u, 9+81*u, 0, 0]; }
+  const sway=Math.sin(t*1.3+L.ph)*Math.min(1,(t-L.tb)/0.6);                            // breathing while it stands
+  if(t<L.te){ const b=L.turn*sig((t-L.tc)/(L.td-L.tc),3);
+    return [L.p1[0], L.p1[1]+sway*2*LAY.s, L.Dp, 90+sway*3, b, sway*0.02]; }
+  const u=sig((t-L.te)/(L.tf-L.te),3), s0=Math.sin(L.te*1.3+L.ph);
+  return [L.p1[0]+(L.p2[0]-L.p1[0])*u, L.p1[1]+s0*2*LAY.s+(L.p2[1]-L.p1[1])*u, L.Dp+(L.d2-L.Dp)*u,
+    90+s0*3+(L.a2-90-s0*3)*u, L.turn+L.b2*u, s0*0.02+L.r2*u]; }
+function strikePose(c, L, t){ const [px,py,d,a,b,roll]=planAt(L,t), p=fromPx(px,py,d);
+  c.x=p.x; c.y=p.y; c.d=p.z;
+  const pos=V(p.x,p.y,-p.z), f=pos.clone().negate().normalize(), r=V(0,1,0).cross(f).normalize(), u=f.clone().cross(r);
+  const ar=THREE.MathUtils.degToRad(a), n=u.clone().multiplyScalar(Math.cos(ar)).addScaledVector(f,Math.sin(ar)).normalize().applyAxisAngle(u,b);
+  const xr=r.clone().applyAxisAngle(u,b).applyAxisAngle(n,roll), yr=n.clone().cross(xr);
+  c.mesh.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(xr,yr,n)); }
+function strike(card){
+  const c=makeCoin(card,{vx:0,vy:0}); c.K=strikePlan(); c.script={t:0}; c.front=true; strikePose(c,c.K,0); coins.push(c);
+  if(coins.length>140){ const k=coins.findIndex(q=>!q.script && !q.front && q.d>12); if(k>=0){ scene.remove(coins[k].mesh); coins.splice(k,1); } }
+  return c; }
+function stepScript(c, dt){ const s=c.script; s.t+=dt; const L=c.K, T=L.tf;
+  if(s.t<T){ strikePose(c, L, s.t); return; }
+  // let go with the speed and spin it arrives with: it drifts on with the wall
+  const e=0.02, ka=planAt(L,T-e), kb=planAt(L,T), a=fromPx(ka[0],ka[1],ka[2]), b=fromPx(kb[0],kb[1],kb[2]);
+  const q0=new THREE.Quaternion(); strikePose({mesh:{quaternion:q0}}, L, T-e); strikePose(c, L, T); const q1=c.mesh.quaternion.clone();
+  const dq=q1.clone().multiply(q0.clone().invert()); if(dq.w<0) dq.set(-dq.x,-dq.y,-dq.z,-dq.w);
+  const ang=2*Math.acos(Math.min(1,dq.w)), sn=Math.sqrt(Math.max(1e-9,1-dq.w*dq.w));
+  c.w.set(rnd(-1,1),rnd(-1,1),rnd(-1,1)).normalize().multiplyScalar(rnd(0.4,0.9)); c.ramp=0;   // it arrives at rest: the tumble and drift come in gently
+  c.vx=(b.x-a.x)/e; c.vy=(b.y-a.y)/e; c.vd=(b.z-a.z)/e; c.vx0=DIR*Math.max(0.15,Math.min(0.35,Math.abs(c.vx))); c.recede=0; c.prec=0; c.script=null; c.K=null; }
+
+// the ram's silhouette, cut out of the front layer each frame (read straight from the mint, so it moves in step)
+const maskScene=new THREE.Scene(), maskCam=new THREE.OrthographicCamera(0,W,0,H,-1,1);
+const maskMat=new THREE.MeshBasicMaterial({color:0x000000, transparent:true, opacity:0, blending:THREE.NoBlending, side:THREE.DoubleSide, depthTest:false, depthWrite:false});
+let maskMesh=null;
+const mintWin=()=>{ try{ return parent.document.getElementById('mint')?.contentWindow?.__mint; }catch(e){ return null; } };
+function drawMask(){ const m=mintWin(); if(!m) return; const dy=m.dy(), s=LAY.s;
+  const shapes=PRESS.UP.map(p=>{ const sh=new THREE.Shape(), l=(p.cx-p.r)*s, rr=(p.cx+p.r)*s, yT=(p.yT+dy)*s, yB=(p.yB+dy)*s;
+    sh.moveTo(l,yT); sh.lineTo(rr,yT); sh.lineTo(rr,yB); if(p.ryB) sh.absellipse(p.cx*s,yB,p.r*s,p.ryB*s,0,Math.PI,false); else sh.lineTo(l,yB); sh.lineTo(l,yT); return sh; });
+  if(maskMesh){ maskMesh.geometry.dispose(); maskScene.remove(maskMesh); }
+  maskMesh=new THREE.Mesh(new THREE.ShapeGeometry(shapes,24), maskMat); maskScene.add(maskMesh);
+  const b=HOLE; renderer.setScissor(b.x, H-b.y-b.h, b.w, b.h); renderer.setScissorTest(true);
+  renderer.render(maskScene, maskCam); renderer.setScissorTest(false); }
+
+let last=performance.now(), simT=0, SPEED=+(QP.get('speed')??1);
+function frame(now){
+  const dt0=Math.min(0.05,(now-last)/1000); last=now; const dt=dt0*SPEED; simT+=dt; const t=simT;
+  for(const c of coins){
+    if(c.script){ stepScript(c, dt); if(c.script) continue; }
+    c.vy-=c.g*dt; c.x+=c.vx*dt; c.y+=(c.vy+Math.sin(t*0.35+c.ph)*0.04)*dt;
+    if(c.thrown){ c.vx*=Math.pow(0.6,dt); if(c.g && c.vy<-0.3){ c.g=0; } }
+    else { c.vx+=((c.vx0||0.5)-c.vx)*dt*0.3; c.vy*=Math.pow(0.75,dt); }
+    tmpV.copy(c.w).applyAxisAngle(new THREE.Vector3(0,0,1), Math.sin(t*c.prec+c.ph)*0.6);
+    if(c.ramp!==undefined && c.ramp<1) c.ramp=Math.min(1,c.ramp+dt/3); const ang=tmpV.length()*dt*(c.ramp??1); tmpQ.setFromAxisAngle(tmpV.normalize(), ang); c.mesh.quaternion.premultiply(tmpQ);
+    if(c.recede){ c.vd+=c.recede*dt*3; c.recede*=Math.pow(0.3,dt); if(c.recede<0.05) c.recede=0; }
+    c.d+=c.vd*dt; c.vd*=Math.pow(0.5,dt); if(c.d<DMIN){ c.d=DMIN; c.vd=Math.abs(c.vd); }
+    if(c.front && HOLE && toPx(c.x,c.y,c.d)[0]+pxR(c.d)*1.1 < HOLE.x) c.front=false;   // clear of the box: an ordinary wall coin
+    if(!HOLE) c.front=false;
+    if(DIR*c.x-0.8>halfW(c.d) || c.y<-halfH(c.d)-1 || c.y>halfH(c.d)+1.5){ c.front=false; respawn(c); }
+  }
+  collide(); for(const c of coins) c.mesh.position.set(c.x, c.y, -c.d);
+  // 1: the wall, with the box cut out; 2: the coin in front of the box
+  for(const c of coins) c.mesh.visible=!c.front;
+  DOFU.focus.value=DMIN+(+(QP.get('focus')||4));
+  renderer.setRenderTarget(rt); renderer.autoClear=true; renderer.render(scene,camera);
+  quad.material=dofMat; renderer.setRenderTarget(rt2); renderer.render(dofScene,dofCam);
+  quad.material=finMat; renderer.setRenderTarget(null); renderer.render(dofScene,dofCam);
+  if(HOLE){ const b=HOLE; renderer.setScissor(b.x, H-b.y-b.h, b.w, b.h); renderer.setScissorTest(true); renderer.clear(); renderer.setScissorTest(false);
+    const fr=coins.filter(c=>c.front); if(fr.length){ for(const c of coins) c.mesh.visible=!!c.front; renderer.autoClear=false; renderer.clearDepth(); renderer.render(scene,camera); drawMask(); renderer.autoClear=true; } }
+  requestAnimationFrame(frame);
+}
+function throwCoin(card, sx, sy){ const d=DMIN+1; const x=(sx*2-1)*halfW(d), y=-(sy*2-1)*halfH(d);
+  const c=makeCoin(card,{d, x, y, vx:DIR*rnd(0.6,0.9), vy:rnd(1.1,1.5), g:1.2, thrown:true}); c.w.multiplyScalar(1.8); coins.push(c);
+  if(coins.length>140){ const k=coins.findIndex(q=>!q.thrown && !q.script); scene.remove(coins[k].mesh); coins.splice(k,1); } }
+function cardFor(it){
+  let card=-1;
+  if(it.kind==='milestone') card=CARDS.findIndex(c=>c.kind==='year' && c.year===it.year && c.title===it.title);
+  else card=CARDS.findIndex(c=>c.kind==='person' && c.state==='live' && (c.id===it.id || c.name===it.name));
+  if(card<0 && it.kind==='person'){ const p=everyone.find(q=>q.id===it.id); if(p && !queue.some(q=>q.id===p.id)) queue.unshift({...p}); card=randomPersonCard(); }
+  if(card<0) card=Math.floor(Math.random()*NY);
+  return card; }
+window.addEventListener('message', e=>{ const m=e.data; if(!m || m.type!=='minted' || !started) return; strike(cardFor(m.item||{})); });
+window.__strike=it=>strike(cardFor(it||{}));
+cv.addEventListener('click',e=>{ const r=cv.getBoundingClientRect(); throwCoin(randomPersonCard(),(e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height); });
+function fillWho(){}
+// ---------- people: live list → person slots ----------
+const loadImg=src=>new Promise((r,j)=>{const i=new Image();i.onload=()=>r(i);i.onerror=j;i.src=src;});
+// a person's picture + (when the sync made one) the AI height map of the same sculpture, used as the real relief
+const depthUrl=p=>!p.depth? null : AIDEMO? p.depth : '/people/'+p.depth+'?v='+encodeURIComponent(p.added||'');
+async function loadPerson(p){ const img=await loadImg(p.photo); const du=depthUrl(p); if(du && !QP.has('nodepth')) img.__depth=await loadImg(du).catch(()=>null); return img; }
+const personCards=st=>CARDS.map((c,i)=>i).filter(i=>CARDS[i].kind==='person' && CARDS[i].state===st);
+const NEW_MS=90000;
+function fairPersonCard(cur){   // live person with the fewest coins in flight (this coin not counted); ties broken at random
+  const P=personCards('live'); if(!P.length) return randomPersonCard();
+  const n=new Map(P.map(k=>[k,0])); for(const o of coins) if(n.has(o.card)) n.set(o.card, n.get(o.card)+1);
+  if(n.has(cur)) n.set(cur, n.get(cur)-1);
+  for(const k of P) if(performance.now()-CARDS[k].since<NEW_MS) n.set(k, n.get(k)/3);   // a fresh upload jumps the queue: about triple share at first
+  const min=Math.min(...n.values()), low=P.filter(k=>n.get(k)===min);
+  return CARDS[cur]?.state==='live' && n.get(cur)===min ? cur : low[Math.floor(Math.random()*low.length)];
+}
+function randomPersonCard(){ const P=personCards('live'); return P.length? P[Math.floor(Math.random()*P.length)] : Math.floor(Math.random()*NY); }
+let everyone=[], queue=[], rr=0, lastRotate=0, placing=false;
+function setSlot(k, p){ Object.assign(CARDS[k], {id:p.id, key:p.id+'|'+(p.added||''), name:p.name, year:p.year, yi:yIdx(p.year), placeholder:!!p.placeholder, state:'live', since:performance.now()}); }
+async function placeNext(){   // draw the next queued person into the free slot; retire one if over the limit
+  if(placing || !queue.length) return; const k=personCards('free')[0]; if(k===undefined) return;
+  placing=true; const p=queue.shift();
+  try{
+    const img=await loadPerson(p).catch(()=>null);
+    if(img && everyone.some(q=>q.id===p.id) || p.placeholder){
+      const old=CARDS.findIndex(c=>c.state==='live' && c.id===p.id);   // same person, new photo
+      setSlot(k,p); const t0=performance.now(); await drawCard(k,img,[0]); uploadCell(k*2); window.__lastPlaceMs=performance.now()-t0;
+      setCardMat(k);
+      const live=personCards('live').filter(i=>i!==k);
+      const out= old>=0? old : live.length>=LIVE_MAX ? live.sort((a,b)=>(CARDS[b].placeholder-CARDS[a].placeholder)||(CARDS[a].since-CARDS[b].since))[0] : -1;
+      if(out>=0) CARDS[out].state='retiring';
+      if(p.fresh) throwCoin(k, 0.1, 0.85);   // a newcomer arrives with a coin thrown in (also during a close-up)
+      fillWho();
+    }
+  } finally { placing=false; }
+}
+function onPeople(list){
+  everyone=list;   // empty = no faces yet (placeholders only when the people feed is missing)
+  const ids=new Set(everyone.map(p=>p.id)), keys=new Set(everyone.map(p=>p.id+'|'+(p.added||'')));
+  for(const c of CARDS) if(c.state==='live' && !keys.has(c.key)){ if(!ids.has(c.id)) c.state='retiring'; }   // removed → leaves with its coins
+  queue=queue.filter(p=>ids.has(p.id));
+  const fresh=everyone.filter(p=>!known.has(p.id+'|'+(p.added||''))).map(p=>({...p, fresh:started}));   // new uploads (or a new photo)
+  for(const p of everyone) known.add(p.id+'|'+(p.added||''));
+  queue=[...fresh, ...queue.filter(q=>!fresh.some(f=>f.id===q.id))];   // newest first, ahead of the rotation
+  fillWho();
+}
+const known=new Set();
+function peopleTick(){   // once a second
+  for(const k of personCards('retiring')) if(!coins.some(c=>c.card===k) && !(hero && hero.mesh.material===MATS[k])) CARDS[k].state='free';
+  const live=personCards('live');
+  if(!queue.length && everyone.length>live.length && performance.now()-lastRotate>ROT_S*1000){   // more people than slots: rotate
+    const shown=new Set(live.map(k=>CARDS[k].id)); const rest=everyone.filter(p=>!shown.has(p.id));
+    if(rest.length){ queue.push(rest[rr++ % rest.length]); lastRotate=performance.now(); } }
+  placeNext();
+}
+let started=false;
+(async()=>{
+  await Promise.all(['800 64px','600 18px'].map(f=>document.fonts.load(f+' '+FONT)));
+  const first=await new Promise(res=>{ let done=false; const fin=l=>{ if(!done){ done=true; res(l); } };
+    setTimeout(()=>fin([]),3000); WATCH ? WATCH(l=>{ if(!done) fin(l); else onPeople(l); }, +(QP.get('poll')||15)*1000) : fin([]); });
+  everyone=WATCH? first : PLACEHOLDER;
+  const imgs=[]; let k=0;
+  for(const p of everyone){ if(k>=LIVE_MAX) break; const img=await loadPerson(p).catch(()=>null); if(!img) continue;
+    const i=NY+k++; setSlot(i,p); imgs[i]=img; }
+  for(const p of everyone) known.add(p.id+'|'+(p.added||''));
+  lastRotate=performance.now();
+  await buildFaces(imgs);
+  normT=new THREE.CanvasTexture(normCv); roughT=new THREE.CanvasTexture(roughCv); albT=new THREE.CanvasTexture(albCv);
+  for(const t of [normT,roughT,albT]){ t.colorSpace=THREE.NoColorSpace; t.anisotropy=renderer.capabilities.getMaxAnisotropy(); t.generateMipmaps=true; t.minFilter=THREE.LinearMipmapLinearFilter; }
+  makeMaterials();
+  const Y=CARDS.map((c,i)=>i).filter(i=>CARDS[i].kind==='year'), P=personCards('live'); let yi=0;
+  for(let i=0;i<+(QP.get('n')||110);i++) coins.push(makeCoin(P.length && i%5<2 ? fairPersonCard(-1) : Y[yi++%Y.length]));
+  started=true; setInterval(peopleTick,1000); window.__people={CARDS, queue:()=>queue, everyone:()=>everyone};
+  separateAll(); for(const c of coins){ c.vx=DIR*Math.max(DIR*c.vx,0.3); c.vy*=0.3; c.vd=0; }
+  if(QP.has('gif')){   // ?gif=<n>: one person coin alone, centred, on a clear background; window.__gifFrame(angle) draws one frame (for the per-employee GIF)
+    for(const c of coins) scene.remove(c.mesh); coins.length=0;
+    const k=personCards('live')[+(QP.get('gif')||0)] ?? NY, m=new THREE.Mesh(COIN_GEO, MATS[k]); scene.add(m);
+    m.position.set(0,0,-0.5/(Math.tan(THREE.MathUtils.degToRad(15))*(+(QP.get('fill')||0.86))));
+    window.__gifFrame=(a,tx)=>{ m.rotation.set(tx ?? +(QP.get('tilt')??0.18), a, 0); renderer.setRenderTarget(null); renderer.render(scene,camera); };
+    window.__gifFrame(0); cv.style.opacity=1; window.__ready=true; return; }
+  window.__ready=true; requestAnimationFrame(()=>requestAnimationFrame(()=>cv.style.opacity=1));
+  if(QP.has('demo')) setInterval(()=>strike(Math.floor(Math.random()*NY)), 6000);   // standalone: strike on its own
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

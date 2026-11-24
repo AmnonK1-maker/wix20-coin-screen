@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="he">
+<head>
+<meta charset="utf-8">
+<title>Office Screen v2</title>
+<link href="fonts/fonts.css" rel="stylesheet">
+<style>
+  html,body{margin:0;height:100%;background:#000;overflow:hidden}
+  #screen{position:absolute;left:0;top:0;transform-origin:0 0;overflow:hidden;font-family:'Wix Madefor Display',system-ui,sans-serif;color:#fff}
+  #screen>*{position:absolute}
+  iframe{border:0;display:block;background:transparent}
+  .t{text-transform:uppercase;white-space:nowrap}
+  #title{font-weight:500;letter-spacing:-0.055em}
+  #go{font-weight:500;letter-spacing:-0.045em}
+  #go b{font-weight:500;position:absolute}
+  #go u{text-decoration-thickness:.07em;text-underline-offset:.12em}
+  #qr{background:#fff;box-sizing:border-box}
+  #qr img{width:100%;height:100%;display:block}
+  #scan{font-weight:500;opacity:.92;letter-spacing:-0.01em}
+  #strip{background:#000;overflow:hidden;left:0}
+  #strip .run{position:absolute;left:0;top:0;height:100%;display:flex;align-items:center;white-space:nowrap;will-change:transform;animation:run var(--dur) linear infinite}
+  #strip span{font-weight:600;text-transform:uppercase;letter-spacing:-0.01em}
+  #strip i{display:inline-flex;gap:.35em;align-items:center}
+  #strip svg{display:block}
+  @keyframes run{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+  #grain{pointer-events:none;left:0;top:0;mix-blend-mode:soft-light}
+  #pal{position:fixed;left:16px;top:16px;z-index:9;display:none;gap:10px;align-items:center;background:rgba(0,0,0,.75);color:#fff;padding:10px 14px;border-radius:10px;font:15px system-ui;direction:rtl}
+  #pal.on{display:flex} #pal input{width:42px;height:32px;border:0;padding:0;background:none} #pal button{font:inherit;padding:4px 10px}
+  #load{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:#aaa;font:20px system-ui;direction:rtl;background:#000;transition:opacity .6s}
+</style>
+</head>
+<body>
+<div id="screen">
+  <canvas id="bg"></canvas>
+  <iframe id="mint" title="mint" allowtransparency="true"></iframe>
+  <iframe id="wall" title="wall" allowtransparency="true"></iframe>
+  <div id="go" class="t"><b>[+]</b><div>GO TO<br><u>WIXTIMELINE.COM</u></div></div>
+  <div id="title" class="t">20 YEARS OF<br>CRAZY MILESTONES</div>
+  <div id="qr"><img src="upload-qr.svg" alt=""></div>
+  <div id="scan" class="t">SCAN TO MAKE<br>YOUR MARK</div>
+  <div id="strip"><div class="run" id="run"></div></div>
+  <canvas id="grain"></canvas>
+</div>
+<div id="pal">צבעי המטבעות: <span id="palc"></span><button id="palr">ברירת מחדל</button><button id="palx">סגור</button></div>
+<div id="load">טוען…</div>
+<script type="module">
+// Office LED screen, v2 look: the event site's frame. The press sits in an opaque box at the left; the coin wall fills the whole
+// screen behind the text (cut out where the box is); each struck coin comes out of the box over its frame and into the wall.
+// 2320x880 preview, ?full = 4640x1760.
+import { layout, drawBackdrop, COIN_COLORS, DEFAULT_COIN_COLORS, setCoinColors } from './v2-style.js';
+const Q=new URLSearchParams(location.search), FULL=Q.has('full');
+const W=FULL? 4640 : 2320, H=FULL? 1760 : 880, L=layout(W,H), s=L.s, B=L.box;
+const pass=['slots','poll','seed','speed','n','aifaces','pbump','pscale','colors','ap','focus','cycle'].filter(k=>Q.has(k)).map(k=>`&${k}=${encodeURIComponent(Q.get(k))}`).join('');
+const $=id=>document.getElementById(id), px=v=>v*s+'px';
+const scr=$('screen'); scr.style.width=W+'px'; scr.style.height=H+'px';
+const bg=$('bg'); bg.width=W; bg.height=H; drawBackdrop(bg.getContext('2d'),W,H);
+// the frame's faint grid (?grid = cell in reference px, ?gridop = strength)
+{ const x=bg.getContext('2d'), g=(+(Q.get('grid')||52))*s; x.strokeStyle=`rgba(255,255,255,${+(Q.get('gridop')??0.22)})`; x.lineWidth=Math.max(1,1.2*s); x.beginPath();
+  for(let gx=g*0.6; gx<W; gx+=g){ const v=Math.round(gx)+0.5; x.moveTo(v,0); x.lineTo(v,H); }
+  for(let gy=g*0.35; gy<H; gy+=g){ const v=Math.round(gy)+0.5; x.moveTo(0,v); x.lineTo(W,v); } x.stroke(); }
+const mint=$('mint'), wall=$('wall');
+Object.assign(mint.style,{left:B.x+'px', top:B.y+'px'}); mint.width=Math.round(B.w); mint.height=Math.round(B.h);
+mint.src=`mint.html?panel&fw=${W}&fh=${H}${pass}`;
+wall.style.left=wall.style.top='0'; wall.width=W; wall.height=H;
+wall.src=`index.html?embed&hole&w=${W}&h=${H}${pass}`;
+// type, placed in reference-frame px (2000 x 759)
+const place=(el,o)=>{ for(const [k,v] of Object.entries(o)) el.style[k]= typeof v==='number'? px(v) : v; };
+place($('go'),{left:473, top:629, fontSize:24.5, lineHeight:24.5}); $('go').querySelector('b').style.left='0'; $('go').querySelector('div').style.marginLeft=px(34);
+place($('title'),{left:58, top:47, fontSize:80, lineHeight:66});
+place($('qr'),{left:59, top:595, width:80, height:80, padding:6});
+place($('scan'),{left:163, top:629, fontSize:24.5, lineHeight:24.5});
+// ?qr=0 hides the upload QR and its line (the QR opens the selfie upload page, brik-tools/people/upload-link.txt)
+if(Q.get('qr')==='0'){ $('qr').remove(); $('scan').remove(); }
+place($('strip'),{top:724, width:2000, height:35});
+// the running strip: one set of items, written twice so it loops without a seam
+// the frame's eight little icons between the items (icons/*.svg), 20 ref px tall
+const IC=[['heart',213,180],['couple',163,180],['pieces',196,180],['ovals',163,180],['cake',253,190],['sun',187,187],['layers',236,152],['sign',196,190]];
+const ic=k=>{ const [n,w,h]=IC[k%IC.length]; return `<img src="icons/${n}.svg" alt="" style="height:${px(20)};width:${px(20*w/h)};display:block">`; };
+const TXT=['20 YEARS OF WIX CELEBRATION','2.12.2026','17:30','HANGAR 11, TEL AVIV PORT'];
+// one group = the 4 items with an icon between each, then a wide gap (no icon) before the next "20 YEARS"; 3 groups use the 8 icons in turn
+let one='', k=0; for(let g=0; g<3; g++) TXT.forEach((t,i)=>{ const last=i===TXT.length-1;
+  one+=`<span style="font-size:${px(20)};margin-right:${px(last? 120 : 18)};display:inline-flex;align-items:center">${t}</span>`;
+  if(!last) one+=`<span style="margin-right:${px(18)};display:inline-flex;align-items:center">${ic(k++)}</span>`; });
+const run=$('run'); run.innerHTML=one+one; run.style.setProperty('--dur', (+(Q.get('strip')||66))+'s');   // same speed as before for the longer lap
+// fine grain over everything, like the site
+const gr=$('grain'); gr.width=W; gr.height=H; gr.style.width=W+'px'; gr.style.height=H+'px';
+{ const x=gr.getContext('2d'), id=x.createImageData(W,H), d=id.data, k=+(Q.get('grain')??1);
+  for(let i=0;i<d.length;i+=4){ const v=128+(Math.random()-0.5)*90*k; d[i]=d[i+1]=d[i+2]=v; d[i+3]=255; } x.putImageData(id,0,0); }
+gr.style.opacity=+(Q.get('grainop')??0.35);
+const fit=()=>{ const k=Math.min(innerWidth/W, innerHeight/H); scr.style.transform=`scale(${k})`;
+  scr.style.left=((innerWidth-W*k)/2)+'px'; scr.style.top=((innerHeight-H*k)/2)+'px'; };
+addEventListener('resize',fit); fit();
+let n=0;
+addEventListener('message', e=>{ if(e.source===mint.contentWindow && e.data?.type==='minted'){ wall.contentWindow.postMessage(e.data,'*'); n++; } });
+// coin colours: press C (kept in this browser; the wall recolours at once)
+const pal=$('pal'), palc=$('palc');
+function palDraw(){ palc.innerHTML=''; COIN_COLORS.forEach((c,i)=>{ const inp=document.createElement('input'); inp.type='color'; inp.value=c;
+  inp.oninput=()=>{ const l=COIN_COLORS.slice(); l[i]=inp.value; setCoinColors(l); wall.contentWindow.postMessage({type:'colors', list:l},'*'); }; palc.appendChild(inp); }); }
+addEventListener('keydown', e=>{ if(e.key==='c'||e.key==='C'||e.key==='ב'){ pal.classList.toggle('on'); palDraw(); } });
+$('palx').onclick=()=>pal.classList.remove('on');
+$('palr').onclick=()=>{ setCoinColors(DEFAULT_COIN_COLORS.slice()); wall.contentWindow.postMessage({type:'colors', list:DEFAULT_COIN_COLORS},'*'); palDraw(); };
+window.__office={count:()=>n};
+document.fonts.ready.then(()=>{ const ld=$('load'); ld.style.opacity=0; setTimeout(()=>ld.remove(),700); });   // the frame + press show at once; the coins fade in when built
+</script>
+</body>
+</html>

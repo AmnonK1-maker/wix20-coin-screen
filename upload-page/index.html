@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<base target="_top">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Wix+Madefor+Display:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* the Wix 20 event frame: flat pink with a faint white grid and fine grain, white uppercase Madefor, black strip */
+  :root{ --pink:#f0b9eb; --pink2:#f1d1ee; --deep:#b84fae; --ink:#000; --green:#21ba6d; }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html{ min-height:100%; background:linear-gradient(180deg,var(--pink) 0%,var(--pink) 40%,#f0c2ec 60%,var(--pink2) 100%); }
+  body{ margin:0; min-height:100vh; font-family:'Wix Madefor Display',system-ui,sans-serif; color:#fff; position:relative; overflow-x:hidden;
+    background-image:linear-gradient(rgba(255,255,255,.28) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.28) 1px,transparent 1px);
+    background-size:34px 34px; background-position:-1px 12px; padding:26px 22px 92px; }
+  body::after{ content:''; position:fixed; inset:0; pointer-events:none; mix-blend-mode:soft-light; opacity:.45;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .5 0 0 0 0 .5 0 0 0 0 .5 0 0 0 1.4 -.2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+  .t{ text-transform:uppercase; letter-spacing:-.045em; }
+  .card{ max-width:440px; margin:0 auto; }
+  .go{ font-size:15px; font-weight:500; line-height:1; display:flex; gap:8px; margin-bottom:26px; }
+  h1{ font-size:56px; line-height:.86; font-weight:500; margin:0 0 18px; letter-spacing:-.055em; }
+  p.sub{ margin:0 0 8px; font-size:17px; line-height:1.3; font-weight:500; letter-spacing:-.02em; }
+  .who{ font-size:13px; opacity:.85; margin-bottom:22px; letter-spacing:0; }
+  .shot{ width:236px; height:236px; margin:0 auto 22px; border-radius:50%; border:3px solid #fff; overflow:hidden;
+    display:flex; align-items:center; justify-content:center; text-align:center; font-size:15px; font-weight:500; background:rgba(255,255,255,.14); }
+  .shot img{ width:100%; height:100%; object-fit:cover; }
+  button{ display:block; width:100%; border:0; padding:18px; font:600 18px 'Wix Madefor Display',system-ui,sans-serif; text-transform:uppercase; letter-spacing:-.02em; cursor:pointer; }
+  .primary{ background:var(--ink); color:#fff; }
+  .send{ background:#fff; color:var(--ink); margin-top:14px; }
+  .send:disabled{ opacity:.45; }
+  .ghost{ background:transparent; color:#fff; font-size:15px; padding:10px; text-decoration:underline; text-underline-offset:3px; }
+  label.consent{ display:flex; gap:12px; align-items:flex-start; border:2px solid #fff; padding:14px; margin-top:16px; font-size:15px; line-height:1.3; font-weight:500; letter-spacing:-.01em; }
+  label.consent input{ width:22px; height:22px; flex:none; margin:0; accent-color:var(--ink); }
+  .msg{ min-height:22px; margin-top:14px; font-size:16px; font-weight:600; letter-spacing:-.02em; }
+  .err{ color:#fff; background:var(--ink); padding:10px 12px; }
+  .bar{ height:6px; background:rgba(255,255,255,.4); overflow:hidden; margin-top:14px; display:none; }
+  .bar i{ display:block; height:100%; width:30%; background:#fff; animation:slide 1.1s ease-in-out infinite; }
+  @keyframes slide{ 0%{ transform:translateX(-120%);} 100%{ transform:translateX(340%);} }
+  .done .shot{ border-width:6px; }
+  .fallback{ margin-top:24px; font-size:14px; font-weight:500; }
+  .fallback a{ color:#fff; }
+  .hide{ display:none !important; }
+  /* the frame's running black strip */
+  .strip{ position:fixed; left:0; right:0; bottom:0; height:38px; background:#000; overflow:hidden; z-index:2; }
+  .strip .run{ position:absolute; left:0; top:0; height:100%; display:flex; align-items:center; white-space:nowrap; animation:run 28s linear infinite; }
+  .strip span{ display:inline-flex; align-items:center; font-size:15px; font-weight:600; text-transform:uppercase; letter-spacing:-.01em; margin-right:14px; }
+  .strip svg{ height:16px; width:auto; display:block; }
+  @keyframes run{ from{ transform:translateX(0);} to{ transform:translateX(-50%);} }
+</style>
+</head>
+<body>
+<div class="card" id="card">
+  <div class="go t"><span>[+]</span><span>WIX 20<br>YEARS OF CRAZY MILESTONES</span></div>
+  <h1 class="t">Make<br>your mark</h1>
+  <p class="sub">Take a selfie. It becomes a coin on the office LED wall, with your name and the year you joined Wix.</p>
+  <div class="who"><?= email ?></div>
+
+  <div class="shot t" id="shot">Your face<br>here</div>
+  <input id="file" type="file" accept="image/*" capture="user" class="hide">
+  <button class="primary" id="take">Take a selfie</button>
+  <button class="ghost t hide" id="again">Retake</button>
+
+  <label class="consent" id="consentRow">
+    <input type="checkbox" id="consent">
+    <span>I agree that my photo and name will be shown on the LED screens at the office and at the Wix 20 event.</span>
+  </label>
+  <button class="send" id="send" disabled>Send to the screen</button>
+  <div class="bar" id="bar"><i></i></div>
+  <div class="msg" id="msg"></div>
+
+  <div class="fallback">Trouble? <a href="<?= formUrl ?>">Upload through the form</a></div>
+</div>
+<div class="strip"><div class="run" id="run"></div></div>
+<script>
+const $=id=>document.getElementById(id);
+let photo=null;   // jpeg data URL, upright, max 1600 px
+
+// the strip: the frame's text and icons, written twice so it loops without a seam
+(()=>{ const I={
+  heart:'<svg viewBox="0 0 213 180"><rect width="213" height="180" fill="#858b3c"/><path d="M106 180C70 140 0 105 0 50 0 18 25 0 52 0c26 0 44 16 54 36C116 16 134 0 160 0c27 0 53 18 53 50 0 55-70 90-107 130z" fill="#c9e1fb"/></svg>',
+  ovals:'<svg viewBox="0 0 163 180"><rect width="163" height="180" fill="#1fc76c"/><g fill="#3f8cf3"><ellipse cx="58" cy="54" rx="48" ry="34" transform="rotate(32 58 54)"/><ellipse cx="108" cy="126" rx="54" ry="26" transform="rotate(-55 108 126)"/></g></svg>',
+  sun:'<svg viewBox="0 0 187 187"><rect width="187" height="187" fill="#c9e1fb"/><circle cx="93" cy="93" r="94" fill="#ff8c2a"/></svg>',
+  sign:'<svg viewBox="0 0 196 190"><rect width="196" height="190" fill="#ff9df1"/><path d="M88 62V24l10-20 10 4-8 16 8 0v38h68c5 0 8 3 8 8v114H14V70c0-5 3-8 8-8z" fill="#858b3c"/></svg>' };
+  const G=(a,b,c)=>['20 Years of Wix Celebration',a,'2.12.2026',b,'17:30',c,'Hangar 11, Tel Aviv Port'].map((t,i,l)=>`<span${i===l.length-1?' style="margin-right:64px"':''}>${t}</span>`).join('');
+  const one=G(I.heart,I.ovals,I.sun)+G(I.sign,I.heart,I.ovals);   // a wide gap, no icon, after the port
+  $('run').innerHTML=one+one; })();
+
+$('take').onclick=$('again').onclick=()=>{ $('file').value=''; $('file').click(); };
+$('consent').onchange=update;
+function update(){ $('send').disabled=!(photo && $('consent').checked); }
+function say(t, bad){ $('msg').textContent=t; $('msg').className='msg'+(bad?' err':''); }
+
+$('file').onchange=async e=>{
+  const f=e.target.files && e.target.files[0]; if(!f) return;
+  say('Preparing the photo…');
+  try{
+    photo=await shrink(f, 1600);
+    $('shot').innerHTML=''; const im=new Image(); im.src=photo; $('shot').appendChild(im);
+    $('take').classList.add('hide'); $('again').classList.remove('hide');
+    say(''); update();
+  }catch(err){ photo=null; update(); say('Could not read the photo. Please try again.', true); }
+};
+
+async function shrink(file, max){   // the browser applies the phone's rotation flag when decoding
+  let src, w, h;
+  try{ src=await createImageBitmap(file, {imageOrientation:'from-image'}); w=src.width; h=src.height; }
+  catch(_){ src=await new Promise((ok,no)=>{ const i=new Image(); i.onload=()=>ok(i); i.onerror=no; i.src=URL.createObjectURL(file); }); w=src.naturalWidth; h=src.naturalHeight; }
+  const k=Math.min(1, max/Math.max(w,h)), c=document.createElement('canvas');
+  c.width=Math.round(w*k); c.height=Math.round(h*k);
+  c.getContext('2d').drawImage(src,0,0,c.width,c.height);
+  return c.toDataURL('image/jpeg',0.88);
+}
+
+$('send').onclick=()=>{
+  $('send').disabled=true; $('again').disabled=true; $('bar').style.display='block'; say('Sending…');
+  google.script.run
+    .withSuccessHandler(()=>{ $('bar').style.display='none'; $('card').classList.add('done');
+      ['send','again','consentRow'].forEach(id=>$(id).classList.add('hide'));
+      say('Sent! Your coin will appear on the screen in a minute or two.'); })
+    .withFailureHandler(err=>{ $('bar').style.display='none'; $('again').disabled=false; update();
+      say((err && err.message) || 'Sending failed. Please try again.', true); })
+    .saveSelfie(photo, $('consent').checked);
+};
+</script>
+</body>
+</html>
