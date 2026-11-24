@@ -73,16 +73,18 @@ function draw(t){
 const AIDEMO=Q.has('aifaces'), WATCH=AIDEMO? null : window.watchPeople;
 const DEMO=(AIDEMO? [['Noa Peretz',2014,'r0'],['Ruth Klein',2008,'r2'],['David Mensah',2016,'r3'],['Maya Cohen',2023,'r4'],['Avi Shalom',2007,'r5']] : [['Noa Peretz',2014,'p0'],['Yossi Amar',2019,'p1'],['Ruth Klein',2008,'p2'],['David Mensah',2016,'p3'],['Maya Cohen',2023,'p4'],['Avi Shalom',2007,'p5']])
   .map(([name,year,f])=>({id:'ph-'+f, name, year, photo:'people/'+f+'.jpg'}));
-let PEOPLE=[], QUEUE=[], qi=0, pi=0, seen=null;
+let PEOPLE=[], FRESH=[], mi=0, pi=0, wantPerson=false, seen=null;
 const personItem=p=>({kind:'person', id:p.id, name:p.name, year:p.year||2026, photo:p.photo});
-function buildQueue(){ const ps=WATCH? PEOPLE : DEMO; QUEUE=[];
-  for(const [year,title] of MILESTONES){ QUEUE.push({kind:'milestone', year, title}); if(ps.length) QUEUE.push(personItem(ps[pi++ % ps.length])); } }
+// picked one at a time: a milestone, then an employee, and so on (the employee list arrives a few seconds after start,
+// so a queue built up front had no one in it for the first 71 milestones); a new upload is struck next
 function onPeopleList(l){ const list=l.filter(p=>p.photo), keys=list.map(p=>p.id+'|'+(p.added||''));
-  if(seen){ const fresh=list.filter((p,i)=>!seen.has(keys[i])); QUEUE.splice(qi,0,...fresh.map(personItem)); }   // a new upload is minted next
+  if(seen){ const fresh=list.filter((p,i)=>!seen.has(keys[i])); FRESH.push(...fresh.map(personItem)); }
   seen=new Set(keys); PEOPLE=list; }
 if(WATCH) WATCH(onPeopleList, 15000);
-buildQueue();
-function nextItem(){ if(qi>=QUEUE.length){ buildQueue(); qi=0; } return QUEUE[qi++]; }
+function nextItem(){ if(FRESH.length) return FRESH.shift();
+  const ps=WATCH? PEOPLE : DEMO;
+  if(wantPerson && ps.length){ wantPerson=false; return personItem(ps[pi++ % ps.length]); }
+  wantPerson=true; const [year,title]=MILESTONES[mi++ % MILESTONES.length]; return {kind:'milestone', year, title}; }
 
 let t=+(Q.get('t')||0), last=performance.now(), cur=nextItem(), fired=false, frozen=Q.has('t'), n=0;
 function frame(now){

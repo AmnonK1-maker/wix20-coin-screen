@@ -11,11 +11,11 @@
   iframe{border:0;display:block;background:transparent}
   .t{text-transform:uppercase;white-space:nowrap}
   #title{font-weight:500;letter-spacing:-0.055em}
-  #go{font-weight:500;letter-spacing:-0.045em}
-  #go b{font-weight:500;position:absolute}
+  #go{font-weight:500;letter-spacing:-0.01em}
+  #go b{font-weight:500;position:absolute;letter-spacing:-0.05em}
   #go u{text-decoration-thickness:.07em;text-underline-offset:.12em}
   #qr{background:#fff;box-sizing:border-box}
-  #qr img{width:100%;height:100%;display:block}
+  #qr .q{display:block;width:100%;height:100%;background:var(--qrc,#b84fae);-webkit-mask:url(upload-qr.svg) center/100% 100% no-repeat;mask:url(upload-qr.svg) center/100% 100% no-repeat}
   #scan{font-weight:500;opacity:.92;letter-spacing:-0.01em}
   #strip{background:#000;overflow:hidden;left:0}
   #strip .run{position:absolute;left:0;top:0;height:100%;display:flex;align-items:center;white-space:nowrap;will-change:transform;animation:run var(--dur) linear infinite}
@@ -25,6 +25,8 @@
   @keyframes run{from{transform:translateX(0)}to{transform:translateX(-50%)}}
   #grain{pointer-events:none;left:0;top:0;mix-blend-mode:soft-light}
   #pal{position:fixed;left:16px;top:16px;z-index:9;display:none;gap:10px;align-items:center;background:rgba(0,0,0,.75);color:#fff;padding:10px 14px;border-radius:10px;font:15px system-ui;direction:rtl}
+  #tune{position:fixed;left:16px;top:72px;z-index:9;display:none;flex-direction:column;gap:8px;background:rgba(0,0,0,.75);color:#fff;padding:12px 16px;border-radius:10px;font:15px system-ui;direction:rtl;min-width:320px}
+  #tune.on{display:flex} #tune label{display:flex;gap:10px;align-items:center} #tune label span{width:110px} #tune input{flex:1} #tune b{width:44px;text-align:left;font-weight:600} #tune .row{display:flex;gap:8px} #tune button{font:inherit;padding:4px 10px}
   #pal.on{display:flex} #pal input{width:42px;height:32px;border:0;padding:0;background:none} #pal button{font:inherit;padding:4px 10px}
   #load{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:#aaa;font:20px system-ui;direction:rtl;background:#000;transition:opacity .6s}
 </style>
@@ -34,14 +36,20 @@
   <canvas id="bg"></canvas>
   <iframe id="mint" title="mint" allowtransparency="true"></iframe>
   <iframe id="wall" title="wall" allowtransparency="true"></iframe>
-  <div id="go" class="t"><b>[+]</b><div>GO TO<br><u>WIXTIMELINE.COM</u></div></div>
+  <div id="go" class="t"><b>[+]</b><div>AND GO TO<br><u>WIXTIMELINE.COM</u></div></div>
   <div id="title" class="t">20 YEARS OF<br>CRAZY MILESTONES</div>
-  <div id="qr"><img src="upload-qr.svg" alt=""></div>
+  <div id="qr"><i class="q"></i></div>
   <div id="scan" class="t">SCAN TO MAKE<br>YOUR MARK</div>
   <div id="strip"><div class="run" id="run"></div></div>
   <canvas id="grain"></canvas>
 </div>
-<div id="pal">צבעי המטבעות: <span id="palc"></span><button id="palr">ברירת מחדל</button><button id="palx">סגור</button></div>
+<div id="tune"><div>הגדרות מסך (S להסתיר)</div>
+  <label><span>מספר מטבעות</span><input id="tn" type="range" min="10" max="160" step="5"><b id="tnv"></b></label>
+  <label><span>מהירות</span><input id="ts" type="range" min="0.2" max="1.5" step="0.05"><b id="tsv"></b></label>
+  <label><span>טשטוש עומק</span><input id="ta" type="range" min="0" max="0.8" step="0.05"><b id="tav"></b></label>
+  <label><span>כהות הברקוד</span><input id="tq" type="range" min="0" max="1" step="0.05"><b id="tqv"></b></label>
+  <div class="row"><button id="tr">ברירת מחדל</button><button id="tx">סגור</button></div></div>
+<div id="pal">צבעי המטבעות: <span id="palc"></span><button id="palp1">מקורי</button><button id="palp2">כחול ורוד צהוב</button><button id="palr">ברירת מחדל</button><button id="palx">סגור</button></div>
 <div id="load">טוען…</div>
 <script type="module">
 // Office LED screen, v2 look: the event site's frame. The press sits in an opaque box at the left; the coin wall fills the whole
@@ -65,10 +73,10 @@ wall.style.left=wall.style.top='0'; wall.width=W; wall.height=H;
 wall.src=`index.html?embed&hole&w=${W}&h=${H}${pass}`;
 // type, placed in reference-frame px (2000 x 759)
 const place=(el,o)=>{ for(const [k,v] of Object.entries(o)) el.style[k]= typeof v==='number'? px(v) : v; };
-place($('go'),{left:473, top:629, fontSize:24.5, lineHeight:24.5}); $('go').querySelector('b').style.left='0'; $('go').querySelector('div').style.marginLeft=px(34);
-place($('title'),{left:58, top:47, fontSize:80, lineHeight:66});
-place($('qr'),{left:59, top:595, width:80, height:80, padding:6});
-place($('scan'),{left:163, top:629, fontSize:24.5, lineHeight:24.5});
+place($('go'),{left:426, top:629, fontSize:24.75, lineHeight:24.5}); $('go').querySelector('b').style.left='0'; $('go').querySelector('div').style.marginLeft=px(34);
+place($('title'),{left:59.5, top:50.5, fontSize:80.6, lineHeight:65.5});
+place($('qr'),{left:59.5, top:612, width:70, height:70, padding:5});
+place($('scan'),{left:153, top:629, fontSize:24.75, lineHeight:24.5});
 // ?qr=0 hides the upload QR and its line (the QR opens the selfie upload page, brik-tools/people/upload-link.txt)
 if(Q.get('qr')==='0'){ $('qr').remove(); $('scan').remove(); }
 place($('strip'),{top:724, width:2000, height:35});
@@ -96,8 +104,24 @@ addEventListener('message', e=>{ if(e.source===mint.contentWindow && e.data?.typ
 const pal=$('pal'), palc=$('palc');
 function palDraw(){ palc.innerHTML=''; COIN_COLORS.forEach((c,i)=>{ const inp=document.createElement('input'); inp.type='color'; inp.value=c;
   inp.oninput=()=>{ const l=COIN_COLORS.slice(); l[i]=inp.value; setCoinColors(l); wall.contentWindow.postMessage({type:'colors', list:l},'*'); }; palc.appendChild(inp); }); }
-addEventListener('keydown', e=>{ if(e.key==='c'||e.key==='C'||e.key==='ב'){ pal.classList.toggle('on'); palDraw(); } });
+function onKey(k){ if(k==='c'||k==='C'||k==='ב'){ pal.classList.toggle('on'); palDraw(); } if(k==='s'||k==='S'||k==='ד'){ tune.classList.toggle('on'); tuneDraw(); } }
+addEventListener('keydown', e=>onKey(e.key)); addEventListener('message', e=>{ if(e.data?.type==='key') onKey(e.data.key); });
+// screen settings (key S): coin count, drift speed, depth blur. Kept in this browser (the wall reads the same store at start).
+const TDEF={n:110, speed:1, ap:0.3, qr:0.6}, tune=$('tune');
+let T=(()=>{ try{ return {...TDEF, ...JSON.parse(localStorage.getItem('wix20-tune')||'{}')}; }catch(e){ return {...TDEF}; } })();
+const TI={n:$('tn'), speed:$('ts'), ap:$('ta'), qr:$('tq')}, TV={n:$('tnv'), speed:$('tsv'), ap:$('tav'), qr:$('tqv')};
+// QR: 0 = the frame's own light pink, 1 = near black (0.6 = the deep pink that scans well)
+const QR0=[230,196,226], QR1=[58,10,53];
+function qrColor(){ const t=+T.qr; document.documentElement.style.setProperty('--qrc', 'rgb('+QR0.map((a,i)=>Math.round(a+(QR1[i]-a)*t)).join(',')+')'); }
+function tuneDraw(){ for(const k in TI){ TI[k].value=T[k]; TV[k].textContent=k==='n'? T[k] : (+T[k]).toFixed(2); } }
+function tuneSend(){ qrColor(); try{ localStorage.setItem('wix20-tune', JSON.stringify(T)); }catch(e){} wall.contentWindow.postMessage({type:'tune', ...T},'*'); }
+for(const k in TI) TI[k].oninput=()=>{ T[k]=+TI[k].value; tuneDraw(); tuneSend(); };
+$('tx').onclick=()=>tune.classList.remove('on');
+$('tr').onclick=()=>{ T={...TDEF}; tuneDraw(); tuneSend(); };
+qrColor();
 $('palx').onclick=()=>pal.classList.remove('on');
+const PRESETS={palp1:DEFAULT_COIN_COLORS, palp2:['#4984e9','#eface9','#ffd03b']};   // ready colour sets; each box can still be changed by hand
+for(const id in PRESETS) $(id).onclick=()=>{ const l=PRESETS[id].slice(); setCoinColors(l); wall.contentWindow.postMessage({type:'colors', list:l},'*'); palDraw(); };
 $('palr').onclick=()=>{ setCoinColors(DEFAULT_COIN_COLORS.slice()); wall.contentWindow.postMessage({type:'colors', list:DEFAULT_COIN_COLORS},'*'); palDraw(); };
 window.__office={count:()=>n};
 document.fonts.ready.then(()=>{ const ld=$('load'); ld.style.opacity=0; setTimeout(()=>ld.remove(),700); });   // the frame + press show at once; the coins fade in when built

@@ -39,8 +39,9 @@ const QP=new URLSearchParams(location.search);
 // ?aifaces: demo people with ready AI relief portraits (people/r*.jpg), instead of the live uploads feed
 const AIDEMO=QP.has('aifaces'), WATCH=AIDEMO? null : window.watchPeople;
 if(AIDEMO) PLACEHOLDER.splice(0,PLACEHOLDER.length, ...[['Noa Peretz',2014,'r0'],['Ruth Klein',2008,'r2'],['David Mensah',2016,'r3'],['Maya Cohen',2023,'r4'],['Avi Shalom',2007,'r5']].map(([name,year,f])=>({id:'ph-'+f, name, year, photo:'people/'+f+'.jpg', depth:['r0','r3','r4'].includes(f)? 'people/'+f+'-depth.jpg' : null, placeholder:true})));
-const LIVE_MAX=Math.max(1,+(QP.get('slots')||10)), PSLOTS=LIVE_MAX+1;
-const ROT_S=+(QP.get('rotate')||120);
+// everyone who uploaded keeps coming back for the whole event: 24 faces in flight at once (fits the same atlas as 10), one swapped in every 20 s
+const LIVE_MAX=Math.max(1,+(QP.get('slots')||24)), PSLOTS=LIVE_MAX+1;
+const ROT_S=+(QP.get('rotate')||20);
 const NY=MILESTONES.length;
 const yIdx=y=>{ const i=YEARS.findIndex(r=>r[0]===y); return i>=0? i : (y && y<YEARS[0][0]? 0 : YEARS.length-1); };
 const CARDS = [...MILESTONES.map(([year,title])=>({kind:'year', yi:yIdx(year), year, title})),
@@ -449,10 +450,23 @@ function drawMask(){ const m=mintWin(); if(!m) return; const dy=m.dy(), s=LAY.s;
   renderer.render(maskScene, maskCam); renderer.setScissorTest(false); }
 
 let last=performance.now(), simT=0, SPEED=+(QP.get('speed')??1);
+// live tuning from the office panel (key S): how many coins fly, how fast they drift, how much depth blur. Kept in this browser.
+const TUNE=(()=>{ let t={}; try{ t=JSON.parse(localStorage.getItem('wix20-tune')||'{}')||{}; }catch(e){}
+  return { n: QP.has('n')? +QP.get('n') : (+t.n||110), speed: +t.speed||1, ap: QP.has('ap')? +QP.get('ap') : (t.ap ?? 0.3) }; })();
+DOFU.aperture.value=TUNE.ap;
+const wallCount=()=>coins.filter(c=>!c.script && !c.front && c.die==null).length;
+function addWallCoin(){ const P=personCards('live'), Y=CARDS.map((c,i)=>i).filter(i=>CARDS[i].kind==='year');
+  const c=makeCoin(P.length && Math.random()<0.4 ? fairPersonCard(-1) : Y[Math.floor(Math.random()*Y.length)]); respawn(c); coins.push(c); }   // comes in from the edge
+addEventListener('message', e=>{ const m=e.data; if(m?.type!=='tune') return;
+  if(m.speed!=null) TUNE.speed=+m.speed; if(m.ap!=null){ TUNE.ap=+m.ap; DOFU.aperture.value=TUNE.ap; } if(m.n!=null) TUNE.n=+m.n; });
 function frame(now){
-  const dt0=Math.min(0.05,(now-last)/1000); last=now; const dt=dt0*SPEED; simT+=dt; const t=simT;
+  const dt0=Math.min(0.05,(now-last)/1000); last=now; const dtA=dt0*SPEED; simT+=dtA*TUNE.speed; const t=simT;
+  if(started && wallCount()<TUNE.n) addWallCoin();
+  else if(started && wallCount()>TUNE.n){ let far=null; for(const c of coins) if(!c.script && !c.front && c.die==null && (!far || c.d>far.d)) far=c; if(far) far.die=0; }   // fewer: the farthest coins shrink away   // one a frame: fewer coins leave as they fly off (see respawn below), more come in from the edge
   for(const c of coins){
-    if(c.script){ stepScript(c, dt); if(c.script) continue; }
+    if(c.script){ stepScript(c, dtA); if(c.script) continue; }
+    const dt=dtA*TUNE.speed;
+    if(c.die!=null){ c.die+=dt0*2; c.mesh.scale.setScalar(Math.max(0.001,1-c.die)); if(c.die>=1){ c.gone=true; scene.remove(c.mesh); continue; } }
     c.vy-=c.g*dt; c.x+=c.vx*dt; c.y+=(c.vy+Math.sin(t*0.35+c.ph)*0.04)*dt;
     if(c.thrown){ c.vx*=Math.pow(0.6,dt); if(c.g && c.vy<-0.3){ c.g=0; } }
     else { c.vx+=((c.vx0||0.5)-c.vx)*dt*0.3; c.vy*=Math.pow(0.75,dt); }
@@ -462,8 +476,9 @@ function frame(now){
     c.d+=c.vd*dt; c.vd*=Math.pow(0.5,dt); if(c.d<DMIN){ c.d=DMIN; c.vd=Math.abs(c.vd); }
     if(c.front && HOLE && toPx(c.x,c.y,c.d)[0]+pxR(c.d)*1.1 < HOLE.x) c.front=false;   // clear of the box: an ordinary wall coin
     if(!HOLE) c.front=false;
-    if(DIR*c.x-0.8>halfW(c.d) || c.y<-halfH(c.d)-1 || c.y>halfH(c.d)+1.5){ c.front=false; respawn(c); }
+    if(DIR*c.x-0.8>halfW(c.d) || c.y<-halfH(c.d)-1 || c.y>halfH(c.d)+1.5){ c.front=false; if(wallCount()>TUNE.n){ c.gone=true; scene.remove(c.mesh); } else respawn(c); }
   }
+  if(coins.some(c=>c.gone)) coins.splice(0, coins.length, ...coins.filter(c=>!c.gone));
   collide(); for(const c of coins) c.mesh.position.set(c.x, c.y, -c.d);
   // 1: the wall, with the box cut out; 2: the coin in front of the box
   for(const c of coins) c.mesh.visible=!c.front;
@@ -472,7 +487,9 @@ function frame(now){
   quad.material=dofMat; renderer.setRenderTarget(rt2); renderer.render(dofScene,dofCam);
   quad.material=finMat; renderer.setRenderTarget(null); renderer.render(dofScene,dofCam);
   if(HOLE){ const b=HOLE; renderer.setScissor(b.x, H-b.y-b.h, b.w, b.h); renderer.setScissorTest(true); renderer.clear(); renderer.setScissorTest(false);
-    const fr=coins.filter(c=>c.front); if(fr.length){ for(const c of coins) c.mesh.visible=!!c.front; renderer.autoClear=false; renderer.clearDepth(); renderer.render(scene,camera); drawMask(); renderer.autoClear=true; } }
+    const fr=coins.filter(c=>c.front); if(fr.length){ for(const c of coins) c.mesh.visible=!!c.front; renderer.autoClear=false; renderer.clearDepth(); renderer.render(scene,camera);
+      if(fr.some(c=>c.script && c.script.t<c.K.tr+0.05)) drawMask();   // the ram hides the coin only while it lies in the die; once it grows toward us it covers the upper punch
+      renderer.autoClear=true; } }
   requestAnimationFrame(frame);
 }
 function throwCoin(card, sx, sy){ const d=DMIN+1; const x=(sx*2-1)*halfW(d), y=-(sy*2-1)*halfH(d);
@@ -486,7 +503,8 @@ function cardFor(it){
   if(card<0) card=Math.floor(Math.random()*NY);
   return card; }
 window.addEventListener('message', e=>{ const m=e.data; if(!m || m.type!=='minted' || !started) return; strike(cardFor(m.item||{})); });
-window.__strike=it=>strike(cardFor(it||{}));
+window.__strike=it=>strike(cardFor(it||{})); window.__count=()=>wallCount();
+if(parent!==window) addEventListener('keydown', e=>parent.postMessage({type:'key', key:e.key},'*'));   // a click on the wall takes the focus: pass keys (C, S) to the office
 cv.addEventListener('click',e=>{ const r=cv.getBoundingClientRect(); throwCoin(randomPersonCard(),(e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height); });
 function fillWho(){}
 // ---------- people: live list → person slots ----------
@@ -559,7 +577,7 @@ let started=false;
   for(const t of [normT,roughT,albT]){ t.colorSpace=THREE.NoColorSpace; t.anisotropy=renderer.capabilities.getMaxAnisotropy(); t.generateMipmaps=true; t.minFilter=THREE.LinearMipmapLinearFilter; }
   makeMaterials();
   const Y=CARDS.map((c,i)=>i).filter(i=>CARDS[i].kind==='year'), P=personCards('live'); let yi=0;
-  for(let i=0;i<+(QP.get('n')||110);i++) coins.push(makeCoin(P.length && i%5<2 ? fairPersonCard(-1) : Y[yi++%Y.length]));
+  for(let i=0;i<TUNE.n;i++) coins.push(makeCoin(P.length && i%5<2 ? fairPersonCard(-1) : Y[yi++%Y.length]));
   started=true; setInterval(peopleTick,1000); window.__people={CARDS, queue:()=>queue, everyone:()=>everyone};
   separateAll(); for(const c of coins){ c.vx=DIR*Math.max(DIR*c.vx,0.3); c.vy*=0.3; c.vd=0; }
   if(QP.has('gif')){   // ?gif=<n>: one person coin alone, centred, on a clear background; window.__gifFrame(angle) draws one frame (for the per-employee GIF)

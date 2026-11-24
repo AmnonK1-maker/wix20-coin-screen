@@ -16,6 +16,6 @@ From this folder:
 python3 -m http.server 5207
 ```
 
-Open http://localhost:5207/screen/office.html — press **C** on the screen to pick coin colours.
+Open http://localhost:5207/screen/office.html — press **C** on the screen for coin colours (incl. a blue / pink / yellow set), **S** for screen settings (number of coins, speed, depth blur, QR darkness).
 
 No employee photos or HR data are in this repo.
