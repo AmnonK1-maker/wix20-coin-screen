@@ -20,24 +20,23 @@
      on a short phone the circle gets smaller (it is the one thing that gives) — Amnon 2026-11-25 */
   #flow{ display:flex; flex-direction:column; align-items:center; padding-bottom:calc(52*var(--u)); }
   #flow>.msg{ position:fixed; }
-  h1{ margin:0; position:relative; left:calc(17*var(--u)); top:0; padding-top:calc(46.5*var(--u)); width:calc(352*var(--u));
+  h1{ margin:0; position:relative; left:calc(17*var(--u)); top:0; padding-top:calc(27.3*var(--u)); width:calc(352*var(--u));
     font:700 calc(56*var(--u))/calc(49*var(--u)) 'Wix Madefor Display',system-ui,sans-serif; letter-spacing:-.03em; text-transform:uppercase; }
-  .sub{ margin:calc(15*var(--u)) 0 0 calc(17*var(--u)); width:calc(343*var(--u)); font-weight:600; font-size:calc(17.13*var(--u)); line-height:calc(19.98*var(--u)); }
-  .shot{ --d:clamp(calc(110*var(--u)), calc(100dvh - 522*var(--u)), calc(280*var(--u))); margin-top:calc(26*var(--u)); width:var(--d); height:var(--d); flex:none; border-radius:50%; border:calc(3*var(--u)) solid #fff; overflow:hidden;
-    display:flex; align-items:center; justify-content:center; text-align:center; font-weight:600; font-size:calc(15*var(--u)); line-height:calc(15*var(--u)); letter-spacing:-.03em; text-transform:uppercase; }
+  .sub{ margin:calc(15.7*var(--u)) 0 0 calc(17*var(--u)); width:calc(343*var(--u)); font-weight:600; font-size:calc(17.13*var(--u)); line-height:calc(19.98*var(--u)); }
+  .shot{ --d:clamp(calc(110*var(--u)), calc(100dvh - 548*var(--u)), calc(266.6*var(--u))); margin-top:calc(38.5*var(--u)); width:var(--d); height:var(--d); flex:none; border-radius:50%; border:calc(3*var(--u)) solid #fff; overflow:hidden;
+    display:flex; align-items:center; justify-content:center; text-align:center; font-weight:600; font-size:calc(18.5*var(--u)); line-height:calc(18.5*var(--u)); letter-spacing:-.03em; text-transform:uppercase; }
   .shot img{ width:100%; height:100%; object-fit:cover; }
   /* a short phone (browser bars take room): a smaller title, so Send stays on screen */
-  @media (max-height:720px){ h1{ padding-top:calc(22*var(--u)); font-size:calc(46*var(--u)); line-height:calc(41*var(--u)); }
-    .shot{ --d:clamp(calc(110*var(--u)), calc(100dvh - 466*var(--u)), calc(280*var(--u))); margin-top:calc(18*var(--u)); } }
+  @media (max-height:720px){ h1{ padding-top:calc(18*var(--u)); font-size:calc(46*var(--u)); line-height:calc(41*var(--u)); }
+    .shot{ --d:clamp(calc(80*var(--u)), calc(100dvh - 502*var(--u)), calc(266.6*var(--u))); margin-top:calc(24*var(--u)); } }
   button{ border:0; cursor:pointer; color:#fff; font:600 calc(18*var(--u)) 'Wix Madefor Display',system-ui,sans-serif; text-transform:uppercase; }
-  .pinkbtn{ margin-top:calc(14*var(--u)); height:calc(39*var(--u)); width:calc(176*var(--u)); background:var(--btn); color:var(--btnText); }
-  /* Amnon 2026-11-25: the circle sits where design screen 2 has it, before and after the selfie (it was lower before) */
-  #again{ width:calc(154*var(--u)); }
-  label.consent{ display:flex; gap:calc(13*var(--u)); align-items:flex-start; align-self:flex-start; margin:calc(20*var(--u)) 0 0 calc(27*var(--u)); width:calc(262*var(--u));
+  .pinkbtn{ margin-top:calc(35.4*var(--u)); height:calc(39*var(--u)); width:calc(176*var(--u)); background:var(--btn); color:var(--btnText); }
+  /* Figma 9660:2 (latest): the same circle and the same 176-wide button before and after the selfie */
+  label.consent{ display:flex; gap:calc(13*var(--u)); align-items:flex-start; align-self:flex-start; margin:calc(18.7*var(--u)) 0 0 calc(27*var(--u)); width:calc(262*var(--u));
     color:var(--ink); font-weight:500; font-size:calc(12*var(--u)); line-height:calc(16*var(--u)); cursor:pointer; }
   label.consent input{ appearance:none; -webkit-appearance:none; flex:none; width:calc(22*var(--u)); height:calc(22*var(--u)); margin:calc(-2.2*var(--u)) 0 0; border-radius:calc(3*var(--u)); background:#fff; display:grid; place-items:center; cursor:pointer; }
   label.consent input:checked::after{ content:''; width:calc(11*var(--u)); height:calc(6*var(--u)); border:solid var(--ink); border-width:0 0 calc(2.5*var(--u)) calc(2.5*var(--u)); transform:translateY(calc(-1.5*var(--u))) rotate(-45deg); }
-  .send{ margin-top:calc(12*var(--u)); width:calc(337*var(--u)); height:calc(47*var(--u)); background:var(--ink); flex:none; }
+  .send{ margin-top:calc(10.5*var(--u)); width:calc(337*var(--u)); height:calc(47*var(--u)); background:var(--ink); flex:none; }
   /* messages float just above the strip, so they never push or cover the page's own parts */
   .msg{ position:fixed !important; left:calc(12*var(--u)); right:calc(12*var(--u)); bottom:calc(46*var(--u) + env(safe-area-inset-bottom, 0px)); z-index:4; max-width:calc(366*var(--u)); margin:0 auto;
     font-weight:600; font-size:calc(14*var(--u)); line-height:calc(18*var(--u)); color:#fff; background:var(--ink); padding:calc(9*var(--u)) calc(12*var(--u)); }
@@ -47,7 +46,7 @@
   .bar{ align-self:stretch; margin:calc(8*var(--u)) calc(27*var(--u)) 0; height:calc(5*var(--u)); background:rgba(255,255,255,.45); overflow:hidden; display:none; }
   .bar i{ display:block; height:100%; width:30%; background:var(--ink); animation:slide 1.1s ease-in-out infinite; }
   @keyframes slide{ 0%{ transform:translateX(-120%);} 100%{ transform:translateX(340%);} }
-  .sent{ margin:calc(23*var(--u)) 0 0 calc(22*var(--u)); width:calc(296*var(--u)); font-weight:600; font-size:calc(15*var(--u)); line-height:calc(20*var(--u)); }
+  .sent{ margin:calc(23*var(--u)) 0 0 calc(22*var(--u)); width:calc(313*var(--u)); font-weight:600; font-size:calc(16*var(--u)); line-height:calc(20*var(--u)); }
   .sent p{ margin:0 0 calc(20*var(--u)); }
   .hide{ display:none !important; }
   button:focus-visible,input:focus-visible{ outline:calc(3*var(--u)) solid #000; outline-offset:calc(2*var(--u)); }
