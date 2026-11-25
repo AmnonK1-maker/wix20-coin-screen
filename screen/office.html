@@ -95,14 +95,18 @@ if(Q.get('qr')==='0'){ $('qr').remove(); $('scan').remove(); }
 place($('strip'),{top:716.8, width:2000, height:41.8});
 // the running strip: one set of items, written twice so it loops without a seam
 // the frame's eight little icons between the items (icons/*.svg), 20 ref px tall
-const IC=[['strip-1',57.62,56.69],['strip-2',48.29,53.07],['strip-3',48.19,53.11]];   // 2026-11-25 Figma: the same three icons in every group
+// the frame's icons (Figma 9680:636 three + the site's other five), sized in Figma px of a 4640 frame.
+// Each group of the strip shows a different three (Amnon 2026-11-25): group g takes icons 3g, 3g+1, 3g+2 of the 8, round the list,
+// so 8 groups go through every mix once before the strip repeats.
+const IC=[['strip-1',57.62,56.69],['strip-2',48.29,53.07],['strip-3',48.19,53.11],['heart',53.1*213/180,53.1],['sun',53.1,53.1],['pieces',53.1*196/180,53.1],['layers',53.1*236/152,53.1],['cake',53.1*253/190,53.1]];
+const GROUPS=8;
 const ic=k=>{ const [n,w,h]=IC[k%IC.length]; return `<img src="icons/${n}.svg" alt="" style="height:${px(h*2000/4640)};width:${px(w*2000/4640)};display:block">`; };
 const TXT=['20 YEARS OF WIX CELEBRATION','2.12.2026','17:30','HANGAR 11, TEL AVIV PORT'];
 // one group = the 4 items with an icon between each, then a wide gap (no icon) before the next "20 YEARS"; 3 groups use the 8 icons in turn
-let one='', k=0; for(let g=0; g<3; g++) TXT.forEach((t,i)=>{ const last=i===TXT.length-1;
+let one='', k=0; for(let g=0; g<GROUPS; g++) TXT.forEach((t,i)=>{ const last=i===TXT.length-1;
   one+=`<span style="font-size:${px(21.43)};margin-right:${px(last? 136 : 20.9)};display:inline-flex;align-items:center">${t}</span>`;
   if(!last) one+=`<span style="margin-right:${px(20.9)};display:inline-flex;align-items:center">${ic(k++)}</span>`; });
-const run=$('run'); run.innerHTML=one+one; run.style.setProperty('--dur', (+(Q.get('strip')||66))+'s');   // same speed as before for the longer lap
+const run=$('run'); run.innerHTML=one+one; run.style.setProperty('--dur', (+(Q.get('strip')||66)*GROUPS/3)+'s');   // same speed as before: the lap is GROUPS groups long   // same speed as before for the longer lap
 
 const fit=()=>{ const k=Math.min(innerWidth/W, innerHeight/H); scr.style.transform=`scale(${k})`;
   scr.style.left=((innerWidth-W*k)/2)+'px'; scr.style.top=((innerHeight-H*k)/2)+'px'; };
