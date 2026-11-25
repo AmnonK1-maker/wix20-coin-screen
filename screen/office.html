@@ -24,8 +24,8 @@
   #strip svg{display:block}
   @keyframes run{from{transform:translateX(0)}to{transform:translateX(-50%)}}
   #grain{pointer-events:none;left:0;top:0;mix-blend-mode:soft-light}
-  #pal{position:fixed;left:16px;top:16px;z-index:9;display:none;gap:10px;align-items:center;background:rgba(0,0,0,.75);color:#fff;padding:10px 14px;border-radius:10px;font:15px system-ui;direction:rtl}
-  #tune{position:fixed;left:16px;top:72px;z-index:9;display:none;flex-direction:column;gap:8px;background:rgba(0,0,0,.75);color:#fff;padding:12px 16px;border-radius:10px;font:15px system-ui;direction:rtl;min-width:320px}
+  #pal{position:fixed;right:16px;top:16px;z-index:9;display:none;gap:10px;align-items:center;background:rgba(0,0,0,.75);color:#fff;padding:10px 14px;border-radius:10px;font:15px system-ui;direction:rtl}
+  #tune{position:fixed;right:16px;top:72px;z-index:9;display:none;flex-direction:column;gap:8px;background:rgba(0,0,0,.75);color:#fff;padding:12px 16px;border-radius:10px;font:15px system-ui;direction:rtl;min-width:320px}
   #tune.on{display:flex} #tune label{display:flex;gap:10px;align-items:center} #tune label span{width:110px} #tune input{flex:1} #tune b{width:44px;text-align:left;font-weight:600} #tune .row{display:flex;gap:8px} #tune button{font:inherit;padding:4px 10px}
   #pal.on{display:flex} #pal input{width:42px;height:32px;border:0;padding:0;background:none} #pal button{font:inherit;padding:4px 10px}
   #load{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:#aaa;font:20px system-ui;direction:rtl;background:#000;transition:opacity .6s}
@@ -63,10 +63,13 @@ const $=id=>document.getElementById(id), px=v=>v*s+'px';
 const scr=$('screen'); scr.style.width=W+'px'; scr.style.height=H+'px';
 const bg=$('bg'); bg.width=W; bg.height=H; drawBackdrop(bg.getContext('2d'),W,H);
 // the frame's faint grid (?grid = cell in reference px, ?gridop = strength)
-{ const x=bg.getContext('2d'), g=(+(Q.get('grid')||66.38))*s;   // 2026-11-25 Figma: 154 px cells at 4640 = 66.38 ref, lines from x 34.5 / y 28.6
+{ const gc=document.createElement('canvas'); gc.width=W; gc.height=H; const x=gc.getContext('2d'), g=(+(Q.get('grid')||66.38))*s;   // 2026-11-25 Figma: 154 px cells at 4640 = 66.38 ref, lines from x 34.5 / y 28.6
   x.strokeStyle=`rgba(255,255,255,${+(Q.get('gridop')??0.22)})`; x.lineWidth=Math.max(1,1.2*s); x.beginPath();
   for(let gx=34.5*s; gx<W; gx+=g){ const v=Math.round(gx)+0.5; x.moveTo(v,0); x.lineTo(v,H); }
-  for(let gy=28.6*s; gy<H; gy+=g){ const v=Math.round(gy)+0.5; x.moveTo(0,v); x.lineTo(W,v); } x.stroke(); }
+  for(let gy=28.6*s; gy<H; gy+=g){ const v=Math.round(gy)+0.5; x.moveTo(0,v); x.lineTo(W,v); } x.stroke();
+  // the grid fades out toward the bottom, as in the Figma (full to y 300, gone by y 520, ref px)
+  const f=x.createLinearGradient(0,300*s,0,520*s); f.addColorStop(0,'#000'); f.addColorStop(1,'rgba(0,0,0,0)');
+  x.globalCompositeOperation='destination-in'; x.fillStyle=f; x.fillRect(0,0,W,H); bg.getContext('2d').drawImage(gc,0,0); }
 const mint=$('mint'), wall=$('wall');
 Object.assign(mint.style,{left:B.x+'px', top:B.y+'px'}); mint.width=Math.round(B.w); mint.height=Math.round(B.h);
 mint.src=`mint.html?panel&fw=${W}&fh=${H}${pass}`;
