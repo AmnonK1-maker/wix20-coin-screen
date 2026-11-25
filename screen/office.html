@@ -23,7 +23,6 @@
   #strip i{display:inline-flex;gap:.35em;align-items:center}
   #strip svg{display:block}
   @keyframes run{from{transform:translateX(0)}to{transform:translateX(-50%)}}
-  #grain{pointer-events:none;left:0;top:0;mix-blend-mode:overlay}
   #pal{position:fixed;right:16px;top:16px;z-index:9;display:none;gap:10px;align-items:center;background:rgba(0,0,0,.75);color:#fff;padding:10px 14px;border-radius:10px;font:15px system-ui;direction:rtl}
   #tune{position:fixed;right:16px;top:72px;z-index:9;display:none;flex-direction:column;gap:8px;background:rgba(0,0,0,.75);color:#fff;padding:12px 16px;border-radius:10px;font:15px system-ui;direction:rtl;min-width:320px}
   #tune.on{display:flex} #tune label{display:flex;gap:10px;align-items:center} #tune label span{width:110px} #tune input{flex:1} #tune b{width:44px;text-align:left;font-weight:600} #tune .row{display:flex;gap:8px} #tune button{font:inherit;padding:4px 10px}
@@ -41,7 +40,6 @@
   <div id="qr"><i class="q"></i></div>
   <div id="scan" class="t">SCAN TO MAKE<br>YOUR MARK</div>
   <div id="strip"><div class="run" id="run"></div></div>
-  <canvas id="grain"></canvas>
 </div>
 <div id="tune"><div>הגדרות מסך (S להסתיר)</div>
   <label><span>מספר מטבעות</span><input id="tn" type="range" min="10" max="160" step="5"><b id="tnv"></b></label>
@@ -49,27 +47,37 @@
   <label><span>טשטוש עומק</span><input id="ta" type="range" min="0" max="0.8" step="0.05"><b id="tav"></b></label>
   <label><span>כהות הברקוד</span><input id="tq" type="range" min="0" max="1" step="0.05"><b id="tqv"></b></label>
   <div class="row"><button id="tr">ברירת מחדל</button><button id="tx">סגור</button></div></div>
-<div id="pal">צבעי המטבעות: <span id="palc"></span><button id="palp1">מקורי</button><button id="palp2">כחול ורוד צהוב</button><button id="palr">ברירת מחדל</button><button id="palx">סגור</button></div>
+<div id="pal">רקע: <input id="bgc" type="color" title="צבע הרקע"> גריד: <input id="grc" type="color" title="צבע הגריד"> | צבעי המטבעות: <span id="palc"></span><button id="palp1">מקורי</button><button id="palp2">כחול ורוד צהוב</button><button id="palr">ברירת מחדל</button><button id="palx">סגור</button></div>
 <div id="load">טוען…</div>
 <script type="module">
 // Office LED screen, v2 look: the event site's frame. The press sits in an opaque box at the left; the coin wall fills the whole
 // screen behind the text (cut out where the box is); each struck coin comes out of the box over its frame and into the wall.
 // 2320x880 preview, ?full = 4640x1760.
-import { layout, drawBackdrop, COIN_COLORS, DEFAULT_COIN_COLORS, setCoinColors } from './v2-style.js';
+import { layout, drawBackdrop, COIN_COLORS, DEFAULT_COIN_COLORS, setCoinColors, BG, BG_DEFAULT, setBg, under } from './v2-style.js';
 const Q=new URLSearchParams(location.search), FULL=Q.has('full');
 const W=FULL? 4640 : 2320, H=FULL? 1760 : 880, L=layout(W,H), s=L.s, B=L.box;
-const pass=['slots','poll','seed','speed','n','aifaces','pbump','pscale','colors','ap','focus','cycle'].filter(k=>Q.has(k)).map(k=>`&${k}=${encodeURIComponent(Q.get(k))}`).join('');
+const pass=['slots','poll','seed','speed','n','aifaces','pbump','pscale','colors','ap','focus','cycle','grainop','doflod','spread'].filter(k=>Q.has(k)).map(k=>`&${k}=${encodeURIComponent(Q.get(k))}`).join('');
 const $=id=>document.getElementById(id), px=v=>v*s+'px';
 const scr=$('screen'); scr.style.width=W+'px'; scr.style.height=H+'px';
-const bg=$('bg'); bg.width=W; bg.height=H; drawBackdrop(bg.getContext('2d'),W,H);
+// 2026-11-25 Figma 9680:636: the frame's grunge texture (overlay, 60%), tiles 529.6 x 353.1 ref px. Baked into the backdrop
+// here; the coins (index.html) and the press (mint.html) apply the same tiles themselves. A blended layer over the whole
+// screen did the same but halved the frame rate.
+let drawBg=null; const GRU=new Image(); GRU.onload=()=>drawBg?.(); GRU.src='icons/grunge.jpg';
+function bakeGrunge(x){ if(!(GRU.complete && GRU.naturalWidth)) return; const tw=529.6*s, th=353.1*s;
+  x.save(); x.globalCompositeOperation='overlay'; x.globalAlpha=+(Q.get('grainop')??0.6);
+  for(let ty=0; ty<H; ty+=th) for(let tx=-9*s; tx<W; tx+=tw) x.drawImage(GRU, tx, ty, tw, th); x.restore(); }
+const bg=$('bg'); bg.width=W; bg.height=H;
+drawBg=function(){ drawBackdrop(bg.getContext('2d'),W,H);
 // the frame's faint grid (?grid = cell in reference px, ?gridop = strength)
 { const gc=document.createElement('canvas'); gc.width=W; gc.height=H; const x=gc.getContext('2d'), g=(+(Q.get('grid')||66.38))*s;   // 2026-11-25 Figma: 154 px cells at 4640 = 66.38 ref, lines from x 34.5 / y 28.6
-  x.strokeStyle=`rgba(255,255,255,${+(Q.get('gridop')??0.3)})`; x.lineWidth=Math.max(1,2.2*s); x.beginPath();
+  x.strokeStyle=under(Q.get('gridc')? '#'+Q.get('gridc') : BG.grid); /* painted so it shows as the chosen colour (default #F1B2EB) under the grunge */ x.lineWidth=Math.max(1,2.2*s); x.beginPath();
   for(let gx=34.5*s; gx<W; gx+=g){ const v=Math.round(gx)+0.5; x.moveTo(v,0); x.lineTo(v,H); }
   for(let gy=28.6*s; gy<H; gy+=g){ const v=Math.round(gy)+0.5; x.moveTo(0,v); x.lineTo(W,v); } x.stroke();
   // the grid softens toward the bottom, as in the Figma 9680:636 (full to y 380, half by y 600, ref px)
   const f=x.createLinearGradient(0,380*s,0,600*s); f.addColorStop(0,'#000'); f.addColorStop(1,'rgba(0,0,0,0.5)');
   x.globalCompositeOperation='destination-in'; x.fillStyle=f; x.fillRect(0,0,W,H); bg.getContext('2d').drawImage(gc,0,0); }
+  bakeGrunge(bg.getContext('2d')); }
+drawBg();
 const mint=$('mint'), wall=$('wall');
 Object.assign(mint.style,{left:B.x+'px', top:B.y+'px'}); mint.width=Math.round(B.w); mint.height=Math.round(B.h);
 mint.src=`mint.html?panel&fw=${W}&fh=${H}${pass}`;
@@ -95,11 +103,7 @@ let one='', k=0; for(let g=0; g<3; g++) TXT.forEach((t,i)=>{ const last=i===TXT.
   one+=`<span style="font-size:${px(21.43)};margin-right:${px(last? 136 : 20.9)};display:inline-flex;align-items:center">${t}</span>`;
   if(!last) one+=`<span style="margin-right:${px(20.9)};display:inline-flex;align-items:center">${ic(k++)}</span>`; });
 const run=$('run'); run.innerHTML=one+one; run.style.setProperty('--dur', (+(Q.get('strip')||66))+'s');   // same speed as before for the longer lap
-// 2026-11-25 Figma 9680:636: the frame's grunge texture over everything (overlay, 60%), tiles 529.6 x 353.1 ref px
-const gr=$('grain'); gr.width=W; gr.height=H; gr.style.width=W+'px'; gr.style.height=H+'px';
-{ const im=new Image(); im.onload=()=>{ const x=gr.getContext('2d'), tw=529.6*s, th=353.1*s;
-    for(let ty=0; ty<H; ty+=th) for(let tx=-9*s; tx<W; tx+=tw) x.drawImage(im, tx, ty, tw, th); }; im.src='icons/grunge.jpg'; }
-gr.style.opacity=+(Q.get('grainop')??0.6);
+
 const fit=()=>{ const k=Math.min(innerWidth/W, innerHeight/H); scr.style.transform=`scale(${k})`;
   scr.style.left=((innerWidth-W*k)/2)+'px'; scr.style.top=((innerHeight-H*k)/2)+'px'; };
 addEventListener('resize',fit); fit();
@@ -107,7 +111,9 @@ let n=0;
 addEventListener('message', e=>{ if(e.source===mint.contentWindow && e.data?.type==='minted'){ wall.contentWindow.postMessage(e.data,'*'); n++; } });
 // coin colours: press C (kept in this browser; the wall recolours at once)
 const pal=$('pal'), palc=$('palc');
-function palDraw(){ palc.innerHTML=''; COIN_COLORS.forEach((c,i)=>{ const inp=document.createElement('input'); inp.type='color'; inp.value=c;
+function bgSend(o){ setBg(o); drawBg(); mint.contentWindow.postMessage({type:'bg', bg:{...BG}},'*'); }
+$('bgc').oninput=e=>bgSend({top:e.target.value}); $('grc').oninput=e=>bgSend({grid:e.target.value});
+function palDraw(){ $('bgc').value=BG.top; $('grc').value=BG.grid; palc.innerHTML=''; COIN_COLORS.forEach((c,i)=>{ const inp=document.createElement('input'); inp.type='color'; inp.value=c;
   inp.oninput=()=>{ const l=COIN_COLORS.slice(); l[i]=inp.value; setCoinColors(l); wall.contentWindow.postMessage({type:'colors', list:l},'*'); }; palc.appendChild(inp); }); }
 function onKey(k){ if(k==='c'||k==='C'||k==='ב'){ pal.classList.toggle('on'); palDraw(); } if(k==='s'||k==='S'||k==='ד'){ tune.classList.toggle('on'); tuneDraw(); } }
 addEventListener('keydown', e=>onKey(e.key)); addEventListener('message', e=>{ if(e.data?.type==='key') onKey(e.data.key); });
@@ -127,7 +133,7 @@ qrColor();
 $('palx').onclick=()=>pal.classList.remove('on');
 const PRESETS={palp1:DEFAULT_COIN_COLORS, palp2:['#4984e9','#eface9','#ffd03b']};   // ready colour sets; each box can still be changed by hand
 for(const id in PRESETS) $(id).onclick=()=>{ const l=PRESETS[id].slice(); setCoinColors(l); wall.contentWindow.postMessage({type:'colors', list:l},'*'); palDraw(); };
-$('palr').onclick=()=>{ setCoinColors(DEFAULT_COIN_COLORS.slice()); wall.contentWindow.postMessage({type:'colors', list:DEFAULT_COIN_COLORS},'*'); palDraw(); };
+$('palr').onclick=()=>{ bgSend({...BG_DEFAULT}); setCoinColors(DEFAULT_COIN_COLORS.slice()); wall.contentWindow.postMessage({type:'colors', list:DEFAULT_COIN_COLORS},'*'); palDraw(); };
 window.__office={count:()=>n};
 document.fonts.ready.then(()=>{ const ld=$('load'); ld.style.opacity=0; setTimeout(()=>ld.remove(),700); });   // the frame + press show at once; the coins fade in when built
 </script>

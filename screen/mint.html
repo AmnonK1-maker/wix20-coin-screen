@@ -16,7 +16,7 @@
 <script type="module">
 // v2 mint: a flat, graphic press (drawn in 2D, no camera, no blank fed in). Each cycle the press comes down, lifts,
 // and the struck coin is there on the lower punch; the coin itself is drawn by the wall (one 3D coin, from the die out into the wall).
-import { C, colorFor, drawBackdrop, layout, PRESS, BOX, BOX_LINE, OX } from './v2-style.js';
+import { C, colorFor, drawBackdrop, layout, PRESS, BOX, BOX_LINE, OX, under, BG } from './v2-style.js';
 import { MILESTONES } from './milestones.js';
 const Q=new URLSearchParams(location.search), PANEL=Q.has('panel');
 if(PANEL) document.body.classList.add('panel');
@@ -33,8 +33,9 @@ const SPEED=+(Q.get('speed')??1);
 const {UP, LOW, OPEN, HIT}=PRESS;
 // the frame's grunge overlay (office.html) lightens everything under it; the press colours are pre-darkened so they
 // come out as the Figma's (green 37,190,114 / orange 252,117,13 / blue 72,130,232) once the overlay is on
-const UNDER=Q.has('raw')? (h=>h) : (h=>{ if(!/^#[0-9a-f]{6}$/i.test(h)) return h; return '#'+[1,3,5].map(i=>{ const t=parseInt(h.slice(i,i+2),16)/255;
-  const b=t>0.611? (t-0.222)/0.778 : t/1.222; return Math.round(Math.max(0,Math.min(1,b))*255).toString(16).padStart(2,'0'); }).join(''); });
+const UNDER=Q.has('raw')? (h=>h) : under;
+addEventListener('message', e=>{ if(e.data?.type==='bg' && e.data.bg) Object.assign(BG, e.data.bg); });   // office: press C, background colour
+function capOf(p,yT){ x.beginPath(); x.ellipse(p.cx,yT,p.r,p.ryT,0,0,Math.PI*2); x.fillStyle=UNDER(p.top); x.fill(); }
 function part(p, dy=0){   // the ram's grain follows it (dy)
   const yT=p.yT+dy, yB=p.yB+dy, l=p.cx-p.r, rr=p.cx+p.r;
   x.beginPath(); x.moveTo(l,yT);
@@ -42,8 +43,10 @@ function part(p, dy=0){   // the ram's grain follows it (dy)
   x.lineTo(rr,yB);
   if(p.ryB) x.ellipse(p.cx,yB,p.r,p.ryB,0,0,Math.PI,false); else x.lineTo(l,yB);
   x.closePath(); x.fillStyle=UNDER(p.col); x.fill();
-  x.save(); x.clip(); x.fillStyle=C.white; x.fillRect(p.white,yT-50,(p.we??rr+2)-p.white,yB-yT+100); x.restore();
-  if(p.ryT){ x.beginPath(); x.ellipse(p.cx,yT,p.r,p.ryT,0,0,Math.PI*2); x.fillStyle=UNDER(p.top); x.fill(); }
+  if(p.ryT && p.wT!=null) capOf(p,yT);   // the stripe starts below the cap: paint the cap first so the stripe's top edge shows
+  x.beginPath(); x.moveTo(l,yT); if(p.ryT) x.ellipse(p.cx,yT,p.r,p.ryT,0,Math.PI,0,false); else x.lineTo(rr,yT); x.lineTo(rr,yB); if(p.ryB) x.ellipse(p.cx,yB,p.r,p.ryB,0,0,Math.PI,false); else x.lineTo(l,yB); x.closePath();
+  x.save(); x.clip(); x.fillStyle=C.white; { const w0=p.wT!=null? p.wT+dy : yT-50; x.fillRect(p.white,w0,(p.we??rr+2)-p.white,yB+50-w0); } x.restore();
+  if(p.ryT && p.wT==null) capOf(p,yT);
   satin(()=>{ x.beginPath(); x.moveTo(l,yT); if(p.ryT) x.ellipse(p.cx,yT,p.r,p.ryT,0,Math.PI,0,false); else x.lineTo(rr,yT);
     x.lineTo(rr,yB); if(p.ryB) x.ellipse(p.cx,yB,p.r,p.ryB,0,0,Math.PI,false); else x.lineTo(l,yB); x.closePath(); }, dy);
 }
@@ -89,25 +92,55 @@ function emboss(paint, colour){   // paint() draws the art (in ref px) into ax; 
 // the art is embossed once into its own layer (the XX rides with the ram: drawn offset by dy)
 let xxCv=null, txCv=null;
 function layer(fn){ const keep=x, c=document.createElement('canvas'); c.width=cv.width; c.height=cv.height; x=c.getContext('2d'); fn(); x=keep; return c; }
-function pressArt(dy){
+function pressArt(dy, which){
   if(!xxCv && XX.complete && XX.naturalWidth) xxCv=layer(()=>emboss(g=>g.drawImage(XX, 1711.1, 207.0, 107.6, 59.4)));
   if(!txCv && document.fonts.check('700 13px "Wix Madefor Display"')) txCv=layer(()=>emboss(g=>{ g.font='700 13.31px "Wix Madefor Display", system-ui, sans-serif';
     g.textAlign='center'; g.textBaseline='alphabetic'; g.fillStyle='#000';
     g.fillText('Twenty Years.', 1774.9, 620.4); g.fillText('One Hell of a Ride.', 1774.9, 637.4); }, '#006231'));
-  x.save(); x.setTransform(1,0,0,1,0,0); if(xxCv) x.drawImage(xxCv,0,dy*s); if(txCv) x.drawImage(txCv,0,0); x.restore();
+  x.save(); x.setTransform(1,0,0,1,0,0); if(which==='xx' && xxCv) x.drawImage(xxCv,0,dy*s); if(which==='text' && txCv) x.drawImage(txCv,0,0); x.restore();
 }
-function draw(t){
-  x.setTransform(1,0,0,1,0,0);
+// the frame's grunge texture (office.html lays it over the screen but leaves this box out): here the ram's share rides
+// with the ram, so the texture never slides over the moving press. Same tiles, same origin as office.html.
+const GRU=new Image(); GRU.src='icons/grunge.jpg'; const GOP=+(Q.get('grainop')??0.6);
+const RAM=document.createElement('canvas'), RMK=document.createElement('canvas'); RAM.width=RMK.width=cv.width; RAM.height=RMK.height=cv.height;
+function grunge(g, dyPx){ if(!(GRU.complete && GRU.naturalWidth) || GOP<=0) return;
+  const p=g.createPattern(GRU,'repeat'), tw=529.6*s, th=353.1*s;
+  p.setTransform(new DOMMatrix().translate(-9*s - B.x, -B.y + dyPx).scale(tw/GRU.naturalWidth, th/GRU.naturalHeight));
+  g.save(); g.setTransform(1,0,0,1,0,0); g.globalCompositeOperation='overlay'; g.globalAlpha=GOP; g.fillStyle=p; g.fillRect(0,0,g.canvas.width,g.canvas.height); g.restore(); }
+// the still part and the ram are each drawn once into their own layer (redrawn only when an asset arrives or the
+// background colour changes); each frame just lays the two down, the ram moved by dy. Cheap enough for a 4K screen.
+const PAD=60*s, STILL=document.createElement('canvas'); STILL.width=cv.width; STILL.height=cv.height; RAM.height=cv.height+Math.round(PAD);
+let cacheKey=null;
+function build(){
+  const ln=BOX_LINE, keep=x;
+  // still: backdrop, panel, base, the base's line, the frame, and its texture
+  x=STILL.getContext('2d'); x.setTransform(1,0,0,1,0,0);
   drawBackdrop(x, cv.width, cv.height, B.x, B.y, FH);   // opaque: the wall's coins never show through the box
   x.setTransform(s,0,0,s,-B.x,-B.y);
-  const ln=BOX_LINE; x.save(); x.beginPath(); x.rect(BOX.x+ln,BOX.y+ln,BOX.w-2*ln,BOX.h-2*ln); x.clip();
-  x.fillStyle='rgba(224,139,217,0.18)'; x.fillRect(BOX.x,BOX.y,BOX.w,BOX.h);   // Figma 9680:636: the box's own pink panel, a touch deeper than the wall
+  x.save(); x.beginPath(); x.rect(BOX.x+ln,BOX.y+ln,BOX.w-2*ln,BOX.h-2*ln); x.clip();
+  if(BG.top.toLowerCase()==='#e8b0e3'){ x.fillStyle='rgba(224,139,217,0.18)'; x.fillRect(BOX.x,BOX.y,BOX.w,BOX.h); }   // Figma 9680:636: the box's own pink panel, a touch deeper than the wall
   for(const p of LOW) part(p);
-  const dy=ramY(t); for(const p of UP) part(p,dy);
-  pressArt(dy);
-  impact(t);
+  pressArt(0,'text');
   x.restore();
   x.strokeStyle=C.white; x.lineWidth=ln; x.strokeRect(BOX.x+ln/2,BOX.y+ln/2,BOX.w-ln,BOX.h-ln);
+  grunge(x, 0);
+  // ram at rest (dy 0), PAD px of extra room above so it can move down; its texture is part of it, so it moves with it
+  const rx=RAM.getContext('2d'); x=rx; rx.setTransform(1,0,0,1,0,0); rx.clearRect(0,0,RAM.width,RAM.height);
+  x.setTransform(s,0,0,s,-B.x,-B.y+PAD);
+  for(const p of UP) part(p,0);
+  pressArt(PAD/s,'xx');
+  const mk=RMK.getContext('2d'); RMK.height=RAM.height; mk.globalCompositeOperation='copy'; mk.drawImage(RAM,0,0);
+  grunge(rx, PAD); rx.save(); rx.setTransform(1,0,0,1,0,0); rx.globalCompositeOperation='destination-in'; rx.drawImage(RMK,0,0); rx.restore();
+  x=keep; }
+function draw(t){
+  const ln=BOX_LINE, dy=ramY(t);
+  const key=[!!(GRU.complete&&GRU.naturalWidth), !!xxCv, !!txCv, BG.top, document.fonts.check('700 13px "Wix Madefor Display"')].join();
+  if(key!==cacheKey){ cacheKey=key; build(); if(!xxCv||!txCv) pressArt(0,'none'); }
+  x.setTransform(1,0,0,1,0,0); x.globalCompositeOperation='copy'; x.drawImage(STILL,0,0); x.globalCompositeOperation='source-over';
+  x.save(); x.beginPath(); x.rect((BOX.x+ln)*s-B.x,(BOX.y+ln)*s-B.y,(BOX.w-2*ln)*s,(BOX.h-2*ln)*s); x.clip();
+  x.drawImage(RAM, 0, dy*s-PAD); x.restore();
+  // the blow's white strokes on top
+  x.setTransform(s,0,0,s,-B.x,-B.y); impact(t);
 }
 
 // ---------- the queue: every milestone, with people in between (as before) ----------

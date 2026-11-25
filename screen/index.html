@@ -291,11 +291,18 @@ function grainTex(ridged){
 }
 const [reedT, reedR]=grainTex(true); reedT.repeat.set(10,1); reedR.repeat.set(10,1);
 function cellTex(base, cell){ const t=base.clone(); t.repeat.set(1/AC,1/AR); t.offset.set((cell%AC)/AC, 1-(Math.floor(cell/AC)+1)/AR); t.needsUpdate=false; return t; }
+// specular anti-aliasing: where the relief's normals change faster than a pixel (small or far coins, the face's fine
+// detail), the highlight is widened instead of jumping pixel to pixel = no sparkle as the coin turns (?specaa=0: off)
+const SPECAA=QP.get('specaa')!=='0';
+const specAA=src=>SPECAA? src.replace('#include <normal_fragment_maps>',`#include <normal_fragment_maps>
+  { vec3 ndx=dFdx(normal), ndy=dFdy(normal); float v=0.25*(dot(ndx,ndx)+dot(ndy,ndy)), a=roughnessFactor*roughnessFactor;
+    roughnessFactor=sqrt(min(1.0, a+min(2.0*v,0.25))); }`) : src;
 function faceHook(m){ m.onBeforeCompile=sh=>{ sh.uniforms.uRelief=m.userData.relief;
-    sh.fragmentShader='uniform vec3 uRelief;\n'+sh.fragmentShader.replace('#include <map_fragment>',`
+    sh.fragmentShader=specAA('uniform vec3 uRelief;\n'+sh.fragmentShader.replace('#include <map_fragment>',`
   { float A=texture2D(map,vMapUv).r*2.0, mk=smoothstep(0.38,0.7,texture2D(roughnessMap,vRoughnessMapUv).b);
-    diffuseColor.rgb=mix(diffuse,uRelief,mk)*A; }`); };
-  m.customProgramCacheKey=()=>'v2face'; return m; }
+    diffuseColor.rgb=mix(diffuse,uRelief,mk)*A; }`)); };
+  m.customProgramCacheKey=()=>'v2face'+SPECAA; return m; }
+function rimHook(m){ m.onBeforeCompile=sh=>{ sh.fragmentShader=specAA(sh.fragmentShader); }; m.customProgramCacheKey=()=>'v2rim'+SPECAA; return m; }
 const lift=(c,k)=>c.clone().lerp(new THREE.Color(1,1,1),k);
 const cardColor=c=>new THREE.Color(colorFor(c.kind==='year'? c.year : c.year||2026));
 function setCardMat(i){ const col=cardColor(CARDS[i]); const [rim,f0,f1,ring]=MATS[i];
@@ -304,7 +311,7 @@ function setCardMat(i){ const col=cardColor(CARDS[i]); const [rim,f0,f1,ring]=MA
 function makeMaterials(){
   CARDS.forEach((c,i)=>{
     const common={ color:new THREE.Color(), metalness:METAL, roughness:ROUGH };
-    const rim=new THREE.MeshStandardMaterial({...common, normalMap:reedT, roughnessMap:reedR});
+    const rim=rimHook(new THREE.MeshStandardMaterial({...common, normalMap:reedT, roughnessMap:reedR}));
     const ring=new THREE.MeshStandardMaterial({...common, roughness:0.55});
     const face=cell=>faceHook(Object.assign(new THREE.MeshStandardMaterial({...common, normalMap:cellTex(normT,cell), roughnessMap:cellTex(roughT,cell), map:cellTex(albT,cell)}),
       {userData:{relief:{value:new THREE.Color()}}}));
@@ -335,18 +342,31 @@ const dofMat=new THREE.ShaderMaterial({ uniforms:{...DOFU, tColor:{value:rt.text
         float dt=dist(uv), ct=coc(dt); if(dt>d0) ct=min(ct,c0); float w=clamp(ct-r+1.0,0.0,1.0); acc+=textureLod(tColor,uv,lod)*w; ws+=w; } }
     gl_FragColor=acc/ws; }`,   // premultiplied colour + coverage
   defines:{TAPS:48, MAXR:(14*H/880).toFixed(1), DOFLOD:QP.get('doflod')==='0'? 'false' : 'true'}, depthTest:false, depthWrite:false, blending:THREE.NoBlending });
-const finMat=new THREE.ShaderMaterial({ uniforms:{...DOFU, tColor:{value:rt2.texture}}, vertexShader:QVS,
+// the frame's grunge texture, applied to the coins here (same tiles and blend as office.html's backdrop): cheaper than
+// a blended layer over the whole screen, which halved the frame rate. Office only (?embed); ?grainop = strength.
+const GRU=new THREE.TextureLoader().load('icons/grunge.jpg'); GRU.wrapS=GRU.wrapT=THREE.RepeatWrapping; GRU.colorSpace=THREE.NoColorSpace;
+const GU={ tGrunge:{value:GRU}, gop:{value: QP.has('embed')? +(QP.get('grainop')??0.6) : 0}, gTile:{value:new THREE.Vector2(529.6*LAY.s, 353.1*LAY.s)}, gOff:{value:9*LAY.s}, gH:{value:H} };
+const GRUNGE=`uniform sampler2D tGrunge; uniform float gop, gOff, gH; uniform vec2 gTile;
+  vec3 grunge(vec3 c){ if(gop<=0.0) return c; vec2 p=vec2(gl_FragCoord.x+gOff, gH-gl_FragCoord.y);
+    vec3 g=texture2D(tGrunge, vec2(p.x/gTile.x, 1.0-p.y/gTile.y)).rgb; c=clamp(c,0.0,1.0);
+    vec3 o=mix(2.0*c*g, 1.0-2.0*(1.0-c)*(1.0-g), step(0.5,c)); return mix(c,o,gop); }`;
+const finMat=new THREE.ShaderMaterial({ uniforms:{...DOFU, ...GU, tColor:{value:rt2.texture}}, vertexShader:QVS,
   fragmentShader:`#include <packing>
   varying vec2 vUv; uniform sampler2D tColor, tDepth; uniform float focus, aperture, near, far, pxScale; uniform vec2 res;
   ${COC}
-  void main(){ vec4 c=texture2D(tColor,vUv); float s=clamp(coc(dist(vUv))*0.5,0.0,2.5); vec4 acc=c; float n=1.0;
+  ${GRUNGE}
+  void main(){ vec4 c=texture2D(tColor,vUv); float s=NOBLUR? 0.0 : clamp(coc(dist(vUv))*0.5,0.0,2.5); vec4 acc=c; float n=1.0;
     if(s>0.3){ for(int i=0;i<8;i++){ float a=float(i)*0.785398; vec2 uv=vUv+vec2(cos(a),sin(a))*s/res; float w=clamp(coc(dist(uv))*0.5-0.2,0.0,1.0); acc+=texture2D(tColor,uv)*w; n+=w; } }
     acc/=n; float cov=clamp(acc.a,0.0,1.0);
     gl_FragColor=vec4(acc.rgb/max(cov,1e-4),1.0);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
+    gl_FragColor.rgb=grunge(gl_FragColor.rgb);
     gl_FragColor=vec4(gl_FragColor.rgb*cov,cov); }`,
-  defines:{MAXR:(14*H/880).toFixed(1)}, depthTest:false, depthWrite:false, blending:THREE.NoBlending });
+  defines:{MAXR:(14*H/880).toFixed(1), NOBLUR:'false'}, depthTest:false, depthWrite:false, blending:THREE.NoBlending });
+// the coin in front of the box: same finish (tone, colour, grunge) without the blur, laid over the wall (premultiplied)
+const frontMat=finMat.clone(); frontMat.uniforms={...DOFU, ...GU, tColor:{value:rt.texture}}; frontMat.defines={...finMat.defines, NOBLUR:'true'};
+Object.assign(frontMat,{ blending:THREE.CustomBlending, blendSrc:THREE.OneFactor, blendDst:THREE.OneMinusSrcAlphaFactor, blendSrcAlpha:THREE.OneFactor, blendDstAlpha:THREE.OneMinusSrcAlphaFactor, transparent:true });
 const quad=new THREE.Mesh(new THREE.PlaneGeometry(2,2), dofMat); dofScene.add(quad);
 
 // ---------- coins ----------
@@ -375,7 +395,19 @@ function makeCoin(card, opts={}){
 function respawn(c){
   if(CARDS[c.card].kind==='year' && personCards('live').length && coins.filter(o=>CARDS[o.card].kind==='person').length<coins.length*0.4){ const k=fairPersonCard(-1); c.card=k; c.mesh.material=MATS[k]; }
   else if(CARDS[c.card].kind==='person'){ const k=fairPersonCard(c.card); if(k!==c.card){ c.card=k; c.mesh.material=MATS[k]; } }
-  c.d=DMIN+Math.pow(Math.random(),0.8)*DSPAN; c.x=-DIR*(halfW(c.d)+0.8); c.y=rnd(-1.1,1.1)*halfH(c.d); c.vx=c.vx0=DIR*rnd(0.15,0.35); c.vy=rnd(-0.06,0.06); c.g=0; c.vd=0; c.thrown=false; }
+  c.d=DMIN+Math.pow(Math.random(),0.8)*DSPAN; c.x=-DIR*(halfW(c.d)+0.8); c.y=rnd(-1.1,1.1)*halfH(c.d); placeEven(c,true); c.vx=c.vx0=DIR*rnd(0.15,0.35); c.vy=rnd(-0.06,0.06); c.g=0; c.vd=0; c.thrown=false; }
+// even spread (Amnon 2026-11-25: "spread over the whole frame, not in patches"): each new coin tries a few depths and
+// heights and takes the one farthest (in screen px, minus both radii) from the coins already there; ?spread=1 = old random
+const SPREAD=QP.get('spread')!=='1', CAND=10;
+function roomAt(px,py,r){ let best=1e9; for(const o of coins){ if(o.script||o.front||o.gone) continue; const [ox,oy]=toPx(o.x,o.y,o.d);
+  const dd=Math.hypot(ox-px,oy-py)-r-pxR(o.d); if(dd<best) best=dd; } return best; }
+function placeEven(c, atEdge){ if(!SPREAD) return;
+  let best=null; for(let k=0;k<CAND;k++){ const d=DMIN+Math.pow(Math.random(),0.8)*DSPAN, y=rnd(-1.1,1.1)*halfH(d);
+    const x=atEdge? -DIR*(halfW(d)+0.8) : rnd(-1.1,1.1)*halfW(d);
+    // at the edge, judge the spot it will fly into (just inside the screen), not the one off screen
+    const [px,py]=toPx(atEdge? -DIR*(halfW(d)-0.6) : x, y, d), sc=roomAt(px,py,pxR(d));
+    if(!best || sc>best.sc) best={sc,d,x,y}; }
+  c.d=best.d; c.x=best.x; c.y=best.y; }
 const BR=0.505, BD=2*BR;
 function collide(){
   for(let it=0; it<2; it++) for(let i=0;i<coins.length;i++){ const a=coins[i]; if(a.script) continue;
@@ -391,6 +423,16 @@ function collide(){
         a.w.add(new THREE.Vector3(-ny,nx,nz).multiplyScalar(k*2)); b.w.add(new THREE.Vector3(ny,-nx,-nz).multiplyScalar(k*2));
         for(const c of [a,b]){ const L=c.w.length(); if(L>3) c.w.multiplyScalar(3/L); } } } }
 }
+// on-screen spacing: coins that crowd each other ON SCREEN (whatever their depth) drift gently apart, so the wall keeps no
+// patches or holes. Soft and slow (px per second), only up and down plus a little sideways; ?spread=1 turns it off.
+const SP_K=+(QP.get('spreadk')??60);
+function screenSpread(dt){ if(!SPREAD) return; const P=[];
+  for(const c of coins){ if(c.script||c.front||c.gone||c.die!=null) continue; const [px,py]=toPx(c.x,c.y,c.d); P.push({c,px,py,r:pxR(c.d),fx:0,fy:0}); }
+  for(let i=0;i<P.length;i++) for(let j=i+1;j<P.length;j++){ const a=P[i], b=P[j], want=(a.r+b.r)*1.6;
+    const dx=a.px-b.px, dy=a.py-b.py; if(Math.abs(dx)>want||Math.abs(dy)>want) continue; const l=Math.hypot(dx,dy)||1e-3; if(l>=want) continue;
+    const f=(1-l/want); a.fx+=dx/l*f; a.fy+=dy/l*f; b.fx-=dx/l*f; b.fy-=dy/l*f; }
+  for(const q of P){ const wpp=2*halfH(q.c.d)/H, k=SP_K*dt*wpp*(W/2320);
+    q.c.y-=q.fy*k; q.c.x+=q.fx*k*0.3; q.c.y=Math.max(-1.15*halfH(q.c.d), Math.min(1.15*halfH(q.c.d), q.c.y)); } }
 function separateAll(){ for(let k=0;k<40;k++) collide(); }
 
 // ---------- the struck coin ----------
@@ -485,7 +527,7 @@ function frame(now){
     if(DIR*c.x-0.8>halfW(c.d) || c.y<-halfH(c.d)-1 || c.y>halfH(c.d)+1.5){ c.front=false; if(wallCount()>TUNE.n){ c.gone=true; scene.remove(c.mesh); } else respawn(c); }
   }
   if(coins.some(c=>c.gone)) coins.splice(0, coins.length, ...coins.filter(c=>!c.gone));
-  collide(); for(const c of coins) c.mesh.position.set(c.x, c.y, -c.d);
+  collide(); screenSpread(dtA*TUNE.speed); for(const c of coins) c.mesh.position.set(c.x, c.y, -c.d);
   // 1: the wall, with the box cut out; 2: the coin in front of the box
   for(const c of coins) c.mesh.visible=!c.front;
   DOFU.focus.value=DMIN+(+(QP.get('focus')||4));
@@ -493,7 +535,9 @@ function frame(now){
   quad.material=dofMat; renderer.setRenderTarget(rt2); renderer.render(dofScene,dofCam);
   quad.material=finMat; renderer.setRenderTarget(null); renderer.render(dofScene,dofCam);
   if(HOLE){ const b=HOLE; renderer.setScissor(b.x, H-b.y-b.h, b.w, b.h); renderer.setScissorTest(true); renderer.clear(); renderer.setScissorTest(false);
-    const fr=coins.filter(c=>c.front); if(fr.length){ for(const c of coins) c.mesh.visible=!!c.front; renderer.autoClear=false; renderer.clearDepth(); renderer.render(scene,camera);
+    const fr=coins.filter(c=>c.front); if(fr.length){ for(const c of coins) c.mesh.visible=!!c.front;
+      renderer.setRenderTarget(rt); renderer.autoClear=true; renderer.render(scene,camera);
+      quad.material=frontMat; renderer.setRenderTarget(null); renderer.autoClear=false; renderer.render(dofScene,dofCam);
       if(fr.some(c=>c.script && c.script.t<c.K.tr+0.05)) drawMask();   // the ram hides the coin only while it lies in the die; once it grows toward us it covers the upper punch
       renderer.autoClear=true; } }
   requestAnimationFrame(frame);
@@ -509,7 +553,7 @@ function cardFor(it){
   if(card<0) card=Math.floor(Math.random()*NY);
   return card; }
 window.addEventListener('message', e=>{ const m=e.data; if(!m || m.type!=='minted' || !started) return; strike(cardFor(m.item||{})); });
-window.__strike=it=>strike(cardFor(it||{})); window.__count=()=>wallCount();
+window.__strike=it=>strike(cardFor(it||{})); window.__count=()=>wallCount(); window.__pos=()=>coins.filter(c=>!c.script&&!c.front).map(c=>[...toPx(c.x,c.y,c.d).map(Math.round), +c.d.toFixed(1)]);
 if(parent!==window) addEventListener('keydown', e=>parent.postMessage({type:'key', key:e.key},'*'));   // a click on the wall takes the focus: pass keys (C, S) to the office
 cv.addEventListener('click',e=>{ const r=cv.getBoundingClientRect(); throwCoin(randomPersonCard(),(e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height); });
 function fillWho(){}
@@ -583,7 +627,7 @@ let started=false;
   for(const t of [normT,roughT,albT]){ t.colorSpace=THREE.NoColorSpace; t.anisotropy=renderer.capabilities.getMaxAnisotropy(); t.generateMipmaps=true; t.minFilter=THREE.LinearMipmapLinearFilter; }
   makeMaterials();
   const Y=CARDS.map((c,i)=>i).filter(i=>CARDS[i].kind==='year'), P=personCards('live'); let yi=0;
-  for(let i=0;i<TUNE.n;i++) coins.push(makeCoin(P.length && i%5<2 ? fairPersonCard(-1) : Y[yi++%Y.length]));
+  for(let i=0;i<TUNE.n;i++){ const c=makeCoin(P.length && i%5<2 ? fairPersonCard(-1) : Y[yi++%Y.length]); placeEven(c,false); coins.push(c); }
   started=true; setInterval(peopleTick,1000); window.__people={CARDS, queue:()=>queue, everyone:()=>everyone};
   separateAll(); for(const c of coins){ c.vx=DIR*Math.max(DIR*c.vx,0.3); c.vy*=0.3; c.vd=0; }
   if(QP.has('gif')){   // ?gif=<n>: one person coin alone, centred, on a clear background; window.__gifFrame(angle) draws one frame (for the per-employee GIF)

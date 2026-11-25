@@ -16,13 +16,21 @@ export function setCoinColors(l) { COIN_COLORS.splice(0, COIN_COLORS.length, ...
 export const ART_COLORS = { [C.green]: '#ffffff', [C.orange]: '#ffffff', [C.blue]: '#ffffff', [C.lilac]: '#c46fc4' };
 export const colorFor = year => COIN_COLORS[(((+year || 2026) - 2006) % COIN_COLORS.length + COIN_COLORS.length) % COIN_COLORS.length];
 
-// backdrop: vertical gradient measured off the reference (flat top, lighter toward the bottom)
+// the frame's grunge overlay (office.html, mint.html) lightens what is under it; under(hex) = the colour to paint so it shows as hex
+export function under(h) { if (!/^#[0-9a-f]{6}$/i.test(h)) return h;
+  return '#' + [1, 3, 5].map(i => { const t = parseInt(h.slice(i, i + 2), 16) / 255, b = t > 0.611 ? (t - 0.222) / 0.778 : t / 1.222;
+    return Math.round(Math.max(0, Math.min(1, b)) * 255).toString(16).padStart(2, '0'); }).join(''); }
+// background + grid colour as seen on screen (office: press C). Defaults = the Figma 9680:636 frame; kept in this browser.
+export const BG_DEFAULT = { top: '#e8b0e3', grid: '#f1b2eb' };
+export const BG = (() => { let v = null; try { v = JSON.parse(localStorage.getItem('wix20-bg') || 'null'); } catch (e) {}
+  const ok = h => typeof h === 'string' && /^#[0-9a-f]{6}$/i.test(h);
+  return { top: ok(v?.top) ? v.top : BG_DEFAULT.top, grid: ok(v?.grid) ? v.grid : BG_DEFAULT.grid }; })();
+export function setBg(o) { Object.assign(BG, o); try { localStorage.setItem('wix20-bg', JSON.stringify(BG)); } catch (e) {} }
+const mixHex = (a, b, t) => '#' + [1, 3, 5].map(i => Math.round(parseInt(a.slice(i, i + 2), 16) * (1 - t) + parseInt(b.slice(i, i + 2), 16) * t).toString(16).padStart(2, '0')).join('');
+// backdrop: flat at the top, lighter toward the bottom (Figma 9680:636: base 225,153,219 easing about a quarter of the way to #f0f0f0)
 export function drawBackdrop(x, W, H, ox = 0, oy = 0, FH = H) {
-  const g = x.createLinearGradient(0, -oy, 0, FH - oy);
-  // 2026-11-25 Figma 9680:636: the frame's own base pink (225,153,219), lighter toward the bottom; the grunge overlay
-  // in office.html lifts it to the colour seen on screen (232,177,227 at the top)
-  g.addColorStop(0, '#e199db'); g.addColorStop(0.45, '#e19bdb'); g.addColorStop(0.59, '#e1a1dc'); g.addColorStop(0.69, '#e3a6de');
-  g.addColorStop(0.79, '#e4ade0'); g.addColorStop(0.93, '#e5b1e0'); g.addColorStop(1, '#e5b1e0');
+  const g = x.createLinearGradient(0, -oy, 0, FH - oy), b = under(BG.top);
+  for (const [at, t] of [[0, 0], [0.45, 0.023], [0.59, 0.092], [0.69, 0.15], [0.79, 0.23], [0.93, 0.276], [1, 0.276]]) g.addColorStop(at, mixHex(b, '#f0f0f0', t));
   x.fillStyle = g; x.fillRect(0, 0, W, H);
 }
 
@@ -47,8 +55,8 @@ const P0 = {   // re-measured off the final frame (2026-11-24): green spans the 
     {cx:209.5, r:161.5, white:328, we:351, yT:-400,yB:284, ryB:6,  col:C.green},
   ],
   LOW: [
-    {cx:209.5, r:161.5, white:328, we:351, yT:552, ryT:9, top:C.green, yB:1000, col:C.green},
-    {cx:209.5, r:141.5, white:312, we:333, yT:520, ryT:12, top:C.green, yB:552, ryB:16, col:C.orange},
+    {cx:209.5, r:161.5, white:328, we:351, wT:573.5, yT:552, ryT:9, top:C.green, yB:1000, col:C.green},   // wT: the white stripe starts below the top face (Figma 9680:636)
+    {cx:209.5, r:141.5, white:312, we:333, wT:522.5, yT:520, ryT:12, top:C.orange, yB:552, ryB:16, col:C.orange},
     {cx:210,   r:50,    white:240, we:251, yT:452, ryT:8,  top:C.blueTop, yB:517, ryB:8, col:C.blue},   // bottom curves like its top: it stands in the plate
   ],
   OPEN: +(new URLSearchParams(location.search).get('open') ?? 0), HIT: 33,   // ram offset at rest (0 = as in the frame) / at the blow
