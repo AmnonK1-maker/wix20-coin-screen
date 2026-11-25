@@ -47,13 +47,13 @@
   <label><span>טשטוש עומק</span><input id="ta" type="range" min="0" max="0.8" step="0.05"><b id="tav"></b></label>
   <label><span>כהות הברקוד</span><input id="tq" type="range" min="0" max="1" step="0.05"><b id="tqv"></b></label>
   <div class="row"><button id="tr">ברירת מחדל</button><button id="tx">סגור</button></div></div>
-<div id="pal">רקע: <input id="bgc" type="color" title="צבע הרקע"> גריד: <input id="grc" type="color" title="צבע הגריד"> | צבעי המטבעות: <span id="palc"></span><button id="palp1">חדש</button><button id="palp2">כחול ורוד צהוב</button><button id="palp3">קודם</button><button id="palr">ברירת מחדל</button><button id="palx">סגור</button></div>
+<div id="pal">רקע למעלה: <input id="bgh" type="color" title="צבע הרקע למעלה"> רקע: <input id="bgc" type="color" title="צבע הרקע"> גריד: <input id="grc" type="color" title="צבע הגריד"> | צבעי המטבעות: <span id="palc"></span><button id="palp1">חדש</button><button id="palp2">כחול ורוד צהוב</button><button id="palp3">קודם</button><button id="palr">ברירת מחדל</button><button id="palx">סגור</button></div>
 <div id="load">טוען…</div>
 <script type="module">
 // Office LED screen, v2 look: the event site's frame. The press sits in an opaque box at the left; the coin wall fills the whole
 // screen behind the text (cut out where the box is); each struck coin comes out of the box over its frame and into the wall.
 // 2320x880 preview, ?full = 4640x1760.
-import { layout, drawBackdrop, COIN_COLORS, DEFAULT_COIN_COLORS, PREV_COIN_COLORS, setCoinColors, BG, BG_DEFAULT, setBg, under } from './v2-style.js';
+import { layout, drawBackdrop, COIN_COLORS, DEFAULT_COIN_COLORS, PREV_COIN_COLORS, setCoinColors, BG, BG_DEFAULT, setBg, under, hiFor } from './v2-style.js';
 const Q=new URLSearchParams(location.search), FULL=Q.has('full');
 const W=FULL? 4640 : 2320, H=FULL? 1760 : 880, L=layout(W,H), s=L.s, B=L.box;
 const pass=['slots','poll','seed','speed','n','aifaces','pbump','pscale','colors','ap','focus','cycle','grainop','doflod','spread'].filter(k=>Q.has(k)).map(k=>`&${k}=${encodeURIComponent(Q.get(k))}`).join('');
@@ -116,8 +116,8 @@ addEventListener('message', e=>{ if(e.source===mint.contentWindow && e.data?.typ
 // coin colours: press C (kept in this browser; the wall recolours at once)
 const pal=$('pal'), palc=$('palc');
 function bgSend(o){ setBg(o); drawBg(); mint.contentWindow.postMessage({type:'bg', bg:{...BG}},'*'); }
-$('bgc').oninput=e=>bgSend({top:e.target.value}); $('grc').oninput=e=>bgSend({grid:e.target.value});
-function palDraw(){ $('bgc').value=BG.top; $('grc').value=BG.grid; palc.innerHTML=''; COIN_COLORS.forEach((c,i)=>{ const inp=document.createElement('input'); inp.type='color'; inp.value=c;
+$('bgc').oninput=e=>{ bgSend({top:e.target.value, hi:hiFor(e.target.value)}); $('bgh').value=BG.hi; }; $('bgh').oninput=e=>bgSend({hi:e.target.value}); $('grc').oninput=e=>bgSend({grid:e.target.value});
+function palDraw(){ $('bgc').value=BG.top; $('bgh').value=BG.hi; $('grc').value=BG.grid; palc.innerHTML=''; COIN_COLORS.forEach((c,i)=>{ const inp=document.createElement('input'); inp.type='color'; inp.value=c;
   inp.oninput=()=>{ const l=COIN_COLORS.slice(); l[i]=inp.value; setCoinColors(l); wall.contentWindow.postMessage({type:'colors', list:l},'*'); }; palc.appendChild(inp); }); }
 function onKey(k){ if(k==='c'||k==='C'||k==='ב'){ pal.classList.toggle('on'); palDraw(); } if(k==='s'||k==='S'||k==='ד'){ tune.classList.toggle('on'); tuneDraw(); } }
 addEventListener('keydown', e=>onKey(e.key)); addEventListener('message', e=>{ if(e.data?.type==='key') onKey(e.data.key); });

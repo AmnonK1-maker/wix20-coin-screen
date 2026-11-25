@@ -27,16 +27,22 @@ export function under(h) { if (!/^#[0-9a-f]{6}$/i.test(h)) return h;
 export function over(h) { return '#' + [1, 3, 5].map(i => { const t = parseInt(h.slice(i, i + 2), 16) / 255, g = 174.75 / 255;
   const o = t <= 0.5 ? 2 * t * g : 1 - 2 * (1 - t) * (1 - g); return Math.round(Math.min(1, t * 0.4 + o * 0.6) * 255).toString(16).padStart(2, '0'); }).join(''); }
 // Figma fills (2026-11-25, designer): background 227,165,222, grid 226,167,224 — painted under the texture like the Figma
-export const BG_DEFAULT = { top: '#e3a5de', grid: '#e2a7e0' };   // Amnon 2026-11-25: exactly these on screen (227,165,222 / 226,167,224)
-export const BG = (() => { let v = null; try { v = JSON.parse(localStorage.getItem('wix20-bg-3') || 'null'); } catch (e) {}
+// top = the background's main colour (lower part), hi = the lighter top of the gradient, grid = the grid lines; all as seen on screen
+const HI_T = 0.29;   // the 11-25 frame: the top is about 29% of the way to #f0f0f0
+const mixHex0 = (a, b, t) => '#' + [1, 3, 5].map(i => Math.round(parseInt(a.slice(i, i + 2), 16) * (1 - t) + parseInt(b.slice(i, i + 2), 16) * t).toString(16).padStart(2, '0')).join('');
+export const hiFor = top => over(mixHex0(under(top), '#f0f0f0', HI_T));
+export const BG_DEFAULT = { top: '#e3a5de', hi: hiFor('#e3a5de'), grid: '#e2a7e0' };   // Amnon 2026-11-25: 227,165,222 / grid 226,167,224
+export const BG = (() => { let v = null; try { v = JSON.parse(localStorage.getItem('wix20-bg-4') || 'null'); } catch (e) {}
   const ok = h => typeof h === 'string' && /^#[0-9a-f]{6}$/i.test(h);
-  return { top: ok(v?.top) ? v.top : BG_DEFAULT.top, grid: ok(v?.grid) ? v.grid : BG_DEFAULT.grid }; })();
-export function setBg(o) { Object.assign(BG, o); try { localStorage.setItem('wix20-bg-3', JSON.stringify(BG)); } catch (e) {} }
+  const top = ok(v?.top) ? v.top : BG_DEFAULT.top;
+  return { top, hi: ok(v?.hi) ? v.hi : (ok(v?.top) ? hiFor(top) : BG_DEFAULT.hi), grid: ok(v?.grid) ? v.grid : BG_DEFAULT.grid }; })();
+export function setBg(o) { Object.assign(BG, o); try { localStorage.setItem('wix20-bg-4', JSON.stringify(BG)); } catch (e) {} }
 const mixHex = (a, b, t) => '#' + [1, 3, 5].map(i => Math.round(parseInt(a.slice(i, i + 2), 16) * (1 - t) + parseInt(b.slice(i, i + 2), 16) * t).toString(16).padStart(2, '0')).join('');
 // backdrop: lighter at the top, the chosen colour toward the bottom (Figma 9680:636 update: 235,196,232 at the top -> 232,176,227)
 export function drawBackdrop(x, W, H, ox = 0, oy = 0, FH = H) {
   const g = x.createLinearGradient(0, -oy, 0, FH - oy), b = under(BG.top);
-  g.addColorStop(0, b); g.addColorStop(1, b);   // one flat colour, as asked (it used to lighten toward the top)
+  const h = under(BG.hi);   // the gradient: hi at the top easing into the main colour (shape of the 11-25 frame)
+  for (const [at, t] of [[0, 0.29], [0.3, 0.28], [0.4, 0.17], [0.5, 0.13], [0.6, 0.11], [0.7, 0.065], [0.8, 0.04], [0.9, 0], [1, 0]]) g.addColorStop(at, mixHex(b, h, t / HI_T));
   x.fillStyle = g; x.fillRect(0, 0, W, H);
 }
 
