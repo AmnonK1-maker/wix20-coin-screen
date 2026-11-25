@@ -133,9 +133,14 @@ function yearFace(x, year, title){   // WIX on top, the year big, a line under i
 }
 const ARC_R=+(QP.get('arcr')||188);
 function milestoneArt(x, c){ yearFace(x, String(YEARS[c.yi][0]), up(c.title||YEARS[c.yi][1])); }
-// the back of an employee's coin: the year they joined, "<first name> joined Wix" (Amnon 2026-11-25: not the shared "20 years" back)
-function personBackArt(x, c){ const first=up((c.name||'').trim().split(/\s+/)[0]||'');
-  yearFace(x, String(c.year||''), first? first+' JOINED WIX' : 'JOINED WIX'); }
+// the back of an employee's coin: the year they joined and something Wix did that year (Amnon 2026-11-25), not the shared back.
+// A year with several milestones picks one by the person's name, so it stays the same coin after coin; no milestone that year
+// = the nearest year that has one.
+function eventFor(year, name){ const y=+year||0; if(!MILESTONES.length) return '';
+  let best=MILESTONES.reduce((b,m)=>Math.abs(m[0]-y)<Math.abs(b-y)? m[0] : b, MILESTONES[0][0]);
+  const ev=MILESTONES.filter(m=>m[0]===best); let h=0; for(const ch of String(name||'')) h=(h*31+ch.charCodeAt(0))>>>0;
+  return ev[h%ev.length][1]; }
+function personBackArt(x, c){ yearFace(x, String(c.year||''), up(eventFor(c.year, c.name)||'JOINED WIX')); }
 function backArt(x){   // the other side of every milestone coin: a star / 20 / YEARS / OF WIX / WIXTIMELINE.COM
   x.textAlign='center'; x.textBaseline='alphabetic'; x.letterSpacing='-0.03em';
   star(x, 0, -206.2, 12.2);
