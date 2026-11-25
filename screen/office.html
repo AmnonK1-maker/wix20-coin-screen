@@ -23,7 +23,7 @@
   #strip i{display:inline-flex;gap:.35em;align-items:center}
   #strip svg{display:block}
   @keyframes run{from{transform:translateX(0)}to{transform:translateX(-50%)}}
-  #grain{pointer-events:none;left:0;top:0;mix-blend-mode:soft-light}
+  #grain{pointer-events:none;left:0;top:0;mix-blend-mode:overlay}
   #pal{position:fixed;right:16px;top:16px;z-index:9;display:none;gap:10px;align-items:center;background:rgba(0,0,0,.75);color:#fff;padding:10px 14px;border-radius:10px;font:15px system-ui;direction:rtl}
   #tune{position:fixed;right:16px;top:72px;z-index:9;display:none;flex-direction:column;gap:8px;background:rgba(0,0,0,.75);color:#fff;padding:12px 16px;border-radius:10px;font:15px system-ui;direction:rtl;min-width:320px}
   #tune.on{display:flex} #tune label{display:flex;gap:10px;align-items:center} #tune label span{width:110px} #tune input{flex:1} #tune b{width:44px;text-align:left;font-weight:600} #tune .row{display:flex;gap:8px} #tune button{font:inherit;padding:4px 10px}
@@ -64,11 +64,11 @@ const scr=$('screen'); scr.style.width=W+'px'; scr.style.height=H+'px';
 const bg=$('bg'); bg.width=W; bg.height=H; drawBackdrop(bg.getContext('2d'),W,H);
 // the frame's faint grid (?grid = cell in reference px, ?gridop = strength)
 { const gc=document.createElement('canvas'); gc.width=W; gc.height=H; const x=gc.getContext('2d'), g=(+(Q.get('grid')||66.38))*s;   // 2026-11-25 Figma: 154 px cells at 4640 = 66.38 ref, lines from x 34.5 / y 28.6
-  x.strokeStyle=`rgba(255,255,255,${+(Q.get('gridop')??0.22)})`; x.lineWidth=Math.max(1,1.2*s); x.beginPath();
+  x.strokeStyle=`rgba(255,255,255,${+(Q.get('gridop')??0.3)})`; x.lineWidth=Math.max(1,2.2*s); x.beginPath();
   for(let gx=34.5*s; gx<W; gx+=g){ const v=Math.round(gx)+0.5; x.moveTo(v,0); x.lineTo(v,H); }
   for(let gy=28.6*s; gy<H; gy+=g){ const v=Math.round(gy)+0.5; x.moveTo(0,v); x.lineTo(W,v); } x.stroke();
-  // the grid fades out toward the bottom, as in the Figma (full to y 300, gone by y 520, ref px)
-  const f=x.createLinearGradient(0,300*s,0,520*s); f.addColorStop(0,'#000'); f.addColorStop(1,'rgba(0,0,0,0)');
+  // the grid softens toward the bottom, as in the Figma 9680:636 (full to y 380, half by y 600, ref px)
+  const f=x.createLinearGradient(0,380*s,0,600*s); f.addColorStop(0,'#000'); f.addColorStop(1,'rgba(0,0,0,0.5)');
   x.globalCompositeOperation='destination-in'; x.fillStyle=f; x.fillRect(0,0,W,H); bg.getContext('2d').drawImage(gc,0,0); }
 const mint=$('mint'), wall=$('wall');
 Object.assign(mint.style,{left:B.x+'px', top:B.y+'px'}); mint.width=Math.round(B.w); mint.height=Math.round(B.h);
@@ -78,13 +78,13 @@ wall.src=`index.html?embed&hole&w=${W}&h=${H}${pass}`;
 // type, placed in reference-frame px (2000 x 759)
 const place=(el,o)=>{ for(const [k,v] of Object.entries(o)) el.style[k]= typeof v==='number'? px(v) : v; };
 // 2026-11-25 Figma (big-screen-20-years 9640:6016): bigger title, big QR, bold small lines, taller strip
-place($('go'),{left:584.6, top:636.0, fontSize:25.12, lineHeight:25.12}); $('go').querySelector('b').style.left='0'; $('go').querySelector('div').style.marginLeft=px(35);
+place($('go'),{left:572.0, top:636.0, fontSize:25.12, lineHeight:25.12}); $('go').querySelector('b').style.left='0'; $('go').querySelector('div').style.marginLeft=px(35);
 place($('title'),{left:59.8, top:45.7, fontSize:86.75, lineHeight:79.65});
 place($('qr'),{left:66.25, top:512.6, width:167.4, height:168.9, padding:16.4});
-place($('scan'),{left:254.5, top:630.7, fontSize:25.12, lineHeight:25.12});
+place($('scan'),{left:257.7, top:634.3, fontSize:25.12, lineHeight:25.12});
 // ?qr=0 hides the upload QR and its line (the QR opens the selfie upload page, brik-tools/people/upload-link.txt)
 if(Q.get('qr')==='0'){ $('qr').remove(); $('scan').remove(); }
-place($('strip'),{top:707.3, width:2000, height:51.3});
+place($('strip'),{top:716.8, width:2000, height:41.8});
 // the running strip: one set of items, written twice so it loops without a seam
 // the frame's eight little icons between the items (icons/*.svg), 20 ref px tall
 const IC=[['strip-1',57.62,56.69],['strip-2',48.29,53.07],['strip-3',48.19,53.11]];   // 2026-11-25 Figma: the same three icons in every group
@@ -95,11 +95,11 @@ let one='', k=0; for(let g=0; g<3; g++) TXT.forEach((t,i)=>{ const last=i===TXT.
   one+=`<span style="font-size:${px(21.43)};margin-right:${px(last? 136 : 20.9)};display:inline-flex;align-items:center">${t}</span>`;
   if(!last) one+=`<span style="margin-right:${px(20.9)};display:inline-flex;align-items:center">${ic(k++)}</span>`; });
 const run=$('run'); run.innerHTML=one+one; run.style.setProperty('--dur', (+(Q.get('strip')||66))+'s');   // same speed as before for the longer lap
-// fine grain over everything, like the site
+// 2026-11-25 Figma 9680:636: the frame's grunge texture over everything (overlay, 60%), tiles 529.6 x 353.1 ref px
 const gr=$('grain'); gr.width=W; gr.height=H; gr.style.width=W+'px'; gr.style.height=H+'px';
-{ const x=gr.getContext('2d'), id=x.createImageData(W,H), d=id.data, k=+(Q.get('grain')??1);
-  for(let i=0;i<d.length;i+=4){ const v=128+(Math.random()-0.5)*90*k; d[i]=d[i+1]=d[i+2]=v; d[i+3]=255; } x.putImageData(id,0,0); }
-gr.style.opacity=+(Q.get('grainop')??0.35);
+{ const im=new Image(); im.onload=()=>{ const x=gr.getContext('2d'), tw=529.6*s, th=353.1*s;
+    for(let ty=0; ty<H; ty+=th) for(let tx=-9*s; tx<W; tx+=tw) x.drawImage(im, tx, ty, tw, th); }; im.src='icons/grunge.jpg'; }
+gr.style.opacity=+(Q.get('grainop')??0.6);
 const fit=()=>{ const k=Math.min(innerWidth/W, innerHeight/H); scr.style.transform=`scale(${k})`;
   scr.style.left=((innerWidth-W*k)/2)+'px'; scr.style.top=((innerHeight-H*k)/2)+'px'; };
 addEventListener('resize',fit); fit();

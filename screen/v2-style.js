@@ -19,14 +19,16 @@ export const colorFor = year => COIN_COLORS[(((+year || 2026) - 2006) % COIN_COL
 // backdrop: vertical gradient measured off the reference (flat top, lighter toward the bottom)
 export function drawBackdrop(x, W, H, ox = 0, oy = 0, FH = H) {
   const g = x.createLinearGradient(0, -oy, 0, FH - oy);
-  g.addColorStop(0, '#f0b9eb'); g.addColorStop(0.4, '#f0b9eb'); g.addColorStop(0.59, '#f0c2ec');
-  g.addColorStop(0.79, '#f1cced'); g.addColorStop(0.95, '#f1d1ee'); g.addColorStop(1, '#f1d1ee');
+  // 2026-11-25 Figma 9680:636: the frame's own base pink (225,153,219), lighter toward the bottom; the grunge overlay
+  // in office.html lifts it to the colour seen on screen (232,177,227 at the top)
+  g.addColorStop(0, '#e199db'); g.addColorStop(0.45, '#e19bdb'); g.addColorStop(0.59, '#e1a1dc'); g.addColorStop(0.69, '#e3a6de');
+  g.addColorStop(0.79, '#e4ade0'); g.addColorStop(0.93, '#e5b1e0'); g.addColorStop(1, '#e5b1e0');
   x.fillStyle = g; x.fillRect(0, 0, W, H);
 }
 
 // the press box: on the right since the 2026-11-24 frame (it was at x 47; everything inside moves with it)
 // 2026-11-25 Figma: a thicker white frame (9.7 ref px), grown outward; the press inside stays put (OX fixed)
-export const BOX = { x: 1604.4, y: 160.2, w: 341.9, h: 523.8 }, BOX_LINE = 9.7, OX = 1565;
+export const BOX = { x: 1610.7, y: 166.4, w: 328.3, h: 511.5 }, BOX_LINE = 3.3, OX = 1565;   // 2026-11-25 Figma 9680:636: thin frame again
 // layout of the screen (in screen px for a W x H screen)
 export function layout(W, H) {
   const s = W / REF_W;
