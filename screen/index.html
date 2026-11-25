@@ -104,7 +104,12 @@ const up=s=>s.toUpperCase();
 // The art follows the 2026-11-24 coin sheet. 512 frame: the face edge is r 256; the raised rim sits just inside it.
 const ARC_TRACK=0.02;
 const arcLen=(x,text,s,w,track)=>{ x.font=`${w} ${s}px ${FONT}`; return [...text].reduce((a,c)=>a+x.measureText(c).width+s*track,0); };
-function starsSide(x){ for(const sx of [-1,1]) for(let k=-2;k<=2;k++){ const a=Math.PI/2*(1-sx)+k*0.205*sx, r=208; star(x, sx*Math.abs(Math.cos(k*0.205))*r, Math.sin(k*0.205)*r*1.0-10, 11.5); } }
+// 2026-11-25 coin sheet (Figma 9629:1359 / 9629:4310 / 9635:5145), 572 px coins -> this 512 frame (x 0.895, centre 0,0)
+const STARS=[[184.8,70.2],[196,35.2],[201.4,-2.1],[195.1,-42.3],[180.8,-77.6]];
+function starsSide(x){ for(const sx of [-1,1]) for(const [px,py] of STARS) star(x, sx*px, py, 12.2); }
+const WIXLOGO=new Image(), wixLogoReady=new Promise(r=>{ WIXLOGO.onload=WIXLOGO.onerror=r; }); WIXLOGO.src='icons/wix-logo.svg';
+function wixLogo(x, cx, cy, h){ const w=h*92.72/35.9;   // the real Wix wordmark (white = raised)
+  if(WIXLOGO.naturalWidth) x.drawImage(WIXLOGO, cx-w/2, cy-h/2, w, h); else { x.font=`700 ${Math.round(h*1.25)}px ${FONT}`; x.fillText('WIX',cx,cy); } }
 function personArt(x, c){   // name round the top, WIX at both sides, the start year at the bottom; the portrait is drawn by the shader
   const name=up(c.name||''); let sz=58; while(sz>26 && arcLen(x,name,sz,600,ARC_TRACK)/182>2.35) sz-=2;
   arcText(x, name, 182, 0, false, sz, 600, ARC_TRACK);
@@ -112,29 +117,32 @@ function personArt(x, c){   // name round the top, WIX at both sides, the start 
   if(QP.has('celebrate')){   // ?celebrate (the per-employee GIF): the year at both sides, "CELEBRATING 20 YEARS OF WIX" round the bottom
     if(c.year){ x.font=`700 26px ${FONT}`; x.fillText(String(c.year),-196,12); x.fillText(String(c.year),196,12); }
     arcText(x, 'CELEBRATING 20 YEARS OF WIX', 190, 0, true, 26, 600, 0.04); return; }
-  x.fillText('WIX',-203,12); x.fillText('WIX',203,12);
+  wixLogo(x,-188.8,15,18.3); wixLogo(x,187,15,18.3);
   if(c.year){ x.font=`600 56px ${FONT}`; x.fillText(String(c.year),0,196); }   // clear of the raised rim (ring inner edge ≈ r 233)
 }
-function wrapLines(x, text, w, size){ x.font=`600 ${size}px ${FONT}`; const out=[]; let line='';
+function wrapLines(x, text, w, size, weight=600){ x.font=`${weight} ${size}px ${FONT}`; const out=[]; let line='';
   for(const word of text.split(' ')){ const t=line? line+' '+word : word; if(x.measureText(t).width>w && line){ out.push(line); line=word; } else line=t; }
   if(line) out.push(line); return out; }
-function milestoneArt(x, c){   // WIX on top, the year big, the event under it, stars both sides, "20 YEARS OF WIX" round the bottom
-  const year=String(YEARS[c.yi][0]), title=up(c.title||YEARS[c.yi][1]);
-  x.textAlign='center'; x.textBaseline='middle';
-  x.font=`700 38px ${FONT}`; x.fillText('WIX',0,-208);
-  const ys=fitFont(x,year,500,136,300); x.font=`500 ${ys}px ${FONT}`; x.fillText(year,0,-34);
-  let ts=32, L=wrapLines(x,title,250,ts); while(L.length>3 && ts>20){ ts-=2; L=wrapLines(x,title,270,ts); }
-  x.font=`600 ${ts}px ${FONT}`; L.forEach((l,i)=>x.fillText(l,0,58+i*ts*1.15));
+function yearFace(x, year, title){   // WIX on top, the year big, a line under it, stars both sides, "20 YEARS OF WIX" round the bottom
+  x.textAlign='center'; x.textBaseline='middle'; wixLogo(x, 0, -177.6, 32);
+  x.textBaseline='alphabetic'; x.letterSpacing='-0.03em'; const ys=fitFont(x,year,700,122,330); x.font=`700 ${ys}px ${FONT}`; x.fillText(year,0,10.9-(122-ys)*0.36);
+  let ts=31.6, L=wrapLines(x,title,231,ts,700); while(L.length>3 && ts>18){ ts-=2; L=wrapLines(x,title,250,ts,700); }
+  x.font=`700 ${ts}px ${FONT}`; const lh=ts*1.085; L.forEach((l,i)=>x.fillText(l,0,64.5+i*lh)); x.letterSpacing='0px';
   starsSide(x);
-  arcText(x, '20 YEARS OF WIX', 186, 0, true, 24, 600, 0.04);
+  arcText(x, '20 YEARS OF WIX', ARC_R, 0, true, 30, 600, 0.04);
 }
-function backArt(x){   // the other side of every coin: GO TO / 20 / YEARS OF WIX / WIXTIMELINE.COM
-  x.textAlign='center'; x.textBaseline='middle';
-  arcText(x, 'GO TO', 206, 0, false, 24, 600, 0.06);
-  x.font=`500 262px ${FONT}`; x.fillText('20',0,-14);
-  x.font=`600 32px ${FONT}`; x.fillText('YEARS OF WIX',0,104);
+const ARC_R=+(QP.get('arcr')||188);
+function milestoneArt(x, c){ yearFace(x, String(YEARS[c.yi][0]), up(c.title||YEARS[c.yi][1])); }
+// the back of an employee's coin: the year they joined, "<first name> joined Wix" (Amnon 2026-11-25: not the shared "20 years" back)
+function personBackArt(x, c){ const first=up((c.name||'').trim().split(/\s+/)[0]||'');
+  yearFace(x, String(c.year||''), first? first+' JOINED WIX' : 'JOINED WIX'); }
+function backArt(x){   // the other side of every milestone coin: a star / 20 / YEARS / OF WIX / WIXTIMELINE.COM
+  x.textAlign='center'; x.textBaseline='alphabetic'; x.letterSpacing='-0.03em';
+  star(x, 0, -206.2, 12.2);
+  x.font=`600 129.5px ${FONT}`; x.fillText('20',0,-40.4);
+  x.font=`600 77.6px ${FONT}`; x.fillText('YEARS',0,39.6); x.fillText('OF WIX',0,106.6); x.letterSpacing='0px';
   starsSide(x);
-  arcText(x, 'WIXTIMELINE.COM', 183, 0, true, 33, 600, 0.03);
+  arcText(x, 'WIXTIMELINE.COM', ARC_R, 0, true, 30, 600, 0.03);
 }
 const normCv=document.createElement('canvas'), roughCv=document.createElement('canvas'), albCv=document.createElement('canvas');
 for(const c of [normCv,roughCv,albCv]){ c.width=CS*AC; c.height=CS*AR; }
@@ -219,7 +227,7 @@ function drawCard(i, img, sides){ const c=CARDS[i]; const jobs=[];
     // drawn sharp, then blurred once (a blur filter left on while drawing re-blurs the whole face for every letter: ~0.4 s a face)
     artX.setTransform(1,0,0,1,0,0); artX.filter='none'; artX.fillStyle='#000'; artX.fillRect(0,0,CS,CS);
     artX.translate(CS/2,CS/2); artX.scale(K,K); artX.fillStyle='#fff'; artX.strokeStyle='#fff';
-    side? backArt(artX) : c.kind==='person'? personArt(artX,c) : milestoneArt(artX,c);
+    side? (c.kind==='person'? personBackArt(artX,c) : backArt(artX)) : c.kind==='person'? personArt(artX,c) : milestoneArt(artX,c);
     artX.setTransform(1,0,0,1,0,0);
     hx.setTransform(1,0,0,1,0,0); hx.filter='none'; hx.fillStyle='#000'; hx.fillRect(0,0,CS,CS);
     hx.filter=`blur(${1.1*K}px)`; hx.drawImage(artX.canvas,0,0); hx.filter='none';
@@ -554,6 +562,7 @@ function cardFor(it){
   if(card<0) card=Math.floor(Math.random()*NY);
   return card; }
 window.addEventListener('message', e=>{ const m=e.data; if(!m || m.type!=='minted' || !started) return; strike(cardFor(m.item||{})); });
+window.__art=(i,side)=>{ const a=document.createElement('canvas'); a.width=a.height=512; const x=a.getContext('2d'); x.fillStyle='#000'; x.fillRect(0,0,512,512); x.translate(256,256); x.fillStyle='#fff'; const c=CARDS[i]; side? (c.kind==='person'? personBackArt(x,c) : backArt(x)) : c.kind==='person'? personArt(x,c) : milestoneArt(x,c); return a.toDataURL(); }; window.__cards=()=>CARDS.map((c,i)=>[i,c.kind,c.name||c.title,c.year]);
 window.__strike=it=>strike(cardFor(it||{})); window.__count=()=>wallCount(); window.__pos=()=>coins.filter(c=>!c.script&&!c.front).map(c=>[...toPx(c.x,c.y,c.d).map(Math.round), +c.d.toFixed(1)]);
 if(parent!==window) addEventListener('keydown', e=>parent.postMessage({type:'key', key:e.key},'*'));   // a click on the wall takes the focus: pass keys (C, S) to the office
 cv.addEventListener('click',e=>{ const r=cv.getBoundingClientRect(); throwCoin(randomPersonCard(),(e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height); });
@@ -583,7 +592,7 @@ async function placeNext(){   // draw the next queued person into the free slot;
     const img=await loadPerson(p).catch(()=>null);
     if(img && everyone.some(q=>q.id===p.id) || p.placeholder){
       const old=CARDS.findIndex(c=>c.state==='live' && c.id===p.id);   // same person, new photo
-      setSlot(k,p); const t0=performance.now(); await drawCard(k,img,[0]); uploadCell(k*2); window.__lastPlaceMs=performance.now()-t0;
+      setSlot(k,p); const t0=performance.now(); await drawCard(k,img,[0,1]); uploadCell(k*2); uploadCell(k*2+1); window.__lastPlaceMs=performance.now()-t0;
       setCardMat(k);
       const live=personCards('live').filter(i=>i!==k);
       const out= old>=0? old : live.length>=LIVE_MAX ? live.sort((a,b)=>(CARDS[b].placeholder-CARDS[a].placeholder)||(CARDS[a].since-CARDS[b].since))[0] : -1;
@@ -614,7 +623,7 @@ function peopleTick(){   // once a second
 }
 let started=false;
 (async()=>{
-  await Promise.all(['800 64px','600 18px'].map(f=>document.fonts.load(f+' '+FONT)));
+  await Promise.all(['800 64px','600 18px','700 64px'].map(f=>document.fonts.load(f+' '+FONT)).concat([wixLogoReady]));
   const first=await new Promise(res=>{ let done=false; const fin=l=>{ if(!done){ done=true; res(l); } };
     setTimeout(()=>fin([]),3000); WATCH ? WATCH(l=>{ if(!done) fin(l); else onPeople(l); }, +(QP.get('poll')||15)*1000) : fin([]); });
   everyone=WATCH? first : PLACEHOLDER;
