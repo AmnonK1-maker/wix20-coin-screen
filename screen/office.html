@@ -47,13 +47,13 @@
   <label><span>טשטוש עומק</span><input id="ta" type="range" min="0" max="0.8" step="0.05"><b id="tav"></b></label>
   <label><span>כהות הברקוד</span><input id="tq" type="range" min="0" max="1" step="0.05"><b id="tqv"></b></label>
   <div class="row"><button id="tr">ברירת מחדל</button><button id="tx">סגור</button></div></div>
-<div id="pal">רקע: <input id="bgc" type="color" title="צבע הרקע"> גריד: <input id="grc" type="color" title="צבע הגריד"> | צבעי המטבעות: <span id="palc"></span><button id="palp1">מקורי</button><button id="palp2">כחול ורוד צהוב</button><button id="palr">ברירת מחדל</button><button id="palx">סגור</button></div>
+<div id="pal">רקע: <input id="bgc" type="color" title="צבע הרקע"> גריד: <input id="grc" type="color" title="צבע הגריד"> | צבעי המטבעות: <span id="palc"></span><button id="palp1">חדש</button><button id="palp2">כחול ורוד צהוב</button><button id="palp3">קודם</button><button id="palr">ברירת מחדל</button><button id="palx">סגור</button></div>
 <div id="load">טוען…</div>
 <script type="module">
 // Office LED screen, v2 look: the event site's frame. The press sits in an opaque box at the left; the coin wall fills the whole
 // screen behind the text (cut out where the box is); each struck coin comes out of the box over its frame and into the wall.
 // 2320x880 preview, ?full = 4640x1760.
-import { layout, drawBackdrop, COIN_COLORS, DEFAULT_COIN_COLORS, setCoinColors, BG, BG_DEFAULT, setBg, under } from './v2-style.js';
+import { layout, drawBackdrop, COIN_COLORS, DEFAULT_COIN_COLORS, PREV_COIN_COLORS, setCoinColors, BG, BG_DEFAULT, setBg, under } from './v2-style.js';
 const Q=new URLSearchParams(location.search), FULL=Q.has('full');
 const W=FULL? 4640 : 2320, H=FULL? 1760 : 880, L=layout(W,H), s=L.s, B=L.box;
 const pass=['slots','poll','seed','speed','n','aifaces','pbump','pscale','colors','ap','focus','cycle','grainop','doflod','spread'].filter(k=>Q.has(k)).map(k=>`&${k}=${encodeURIComponent(Q.get(k))}`).join('');
@@ -86,10 +86,10 @@ wall.src=`index.html?embed&hole&w=${W}&h=${H}${pass}`;
 // type, placed in reference-frame px (2000 x 759)
 const place=(el,o)=>{ for(const [k,v] of Object.entries(o)) el.style[k]= typeof v==='number'? px(v) : v; };
 // 2026-11-25 Figma (big-screen-20-years 9640:6016): bigger title, big QR, bold small lines, taller strip
-place($('go'),{left:572.0, top:636.0, fontSize:25.12, lineHeight:25.12}); $('go').querySelector('b').style.left='0'; $('go').querySelector('div').style.marginLeft=px(35);
+place($('go'),{left:503.6, top:636.0, fontSize:25.12, lineHeight:25.12}); $('go').querySelector('b').style.left='0'; $('go').querySelector('div').style.marginLeft=px(35);
 place($('title'),{left:59.8, top:45.7, fontSize:86.75, lineHeight:79.65});
-place($('qr'),{left:66.25, top:512.6, width:167.4, height:168.9, padding:16.4});
-place($('scan'),{left:257.7, top:634.3, fontSize:25.12, lineHeight:25.12});
+place($('qr'),{left:66.4, top:549.6, width:130.6, height:131.9, padding:12.75});   // Figma 9680:636 11-25 update: smaller QR
+place($('scan'),{left:220.9, top:634.3, fontSize:25.12, lineHeight:25.12});
 // ?qr=0 hides the upload QR and its line (the QR opens the selfie upload page, brik-tools/people/upload-link.txt)
 if(Q.get('qr')==='0'){ $('qr').remove(); $('scan').remove(); }
 place($('strip'),{top:716.8, width:2000, height:41.8});
@@ -131,7 +131,7 @@ $('tx').onclick=()=>tune.classList.remove('on');
 $('tr').onclick=()=>{ T={...TDEF}; tuneDraw(); tuneSend(); };
 qrColor();
 $('palx').onclick=()=>pal.classList.remove('on');
-const PRESETS={palp1:DEFAULT_COIN_COLORS, palp2:['#4984e9','#eface9','#ffd03b']};   // ready colour sets; each box can still be changed by hand
+const PRESETS={palp1:DEFAULT_COIN_COLORS, palp2:['#4984e9','#eface9','#ffd03b'], palp3:PREV_COIN_COLORS};   // ready colour sets; each box can still be changed by hand
 for(const id in PRESETS) $(id).onclick=()=>{ const l=PRESETS[id].slice(); setCoinColors(l); wall.contentWindow.postMessage({type:'colors', list:l},'*'); palDraw(); };
 $('palr').onclick=()=>{ bgSend({...BG_DEFAULT}); setCoinColors(DEFAULT_COIN_COLORS.slice()); wall.contentWindow.postMessage({type:'colors', list:DEFAULT_COIN_COLORS},'*'); palDraw(); };
 window.__office={count:()=>n};

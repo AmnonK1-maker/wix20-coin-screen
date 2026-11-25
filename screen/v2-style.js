@@ -5,13 +5,15 @@ export const C = {
   green: '#21ba6d', orange: '#fc750e', blue: '#4984e9', blueTop: '#3b71c8', lilac: '#eface9', white: '#ffffff', ink: '#000000',
 };
 // coin colours: the press's own colours + the lilac of the reference coin
-export const DEFAULT_COIN_COLORS = [C.green, C.orange, C.blue, C.lilac];
+// coin colours (Amnon 2026-11-25, RGB 193,118,92 / 213,207,42 / 177,13,253 / 16,157,45); the set before is PREV_COIN_COLORS
+export const DEFAULT_COIN_COLORS = ['#c1765c', '#d5cf2a', '#b10dfd', '#109d2d'];
+export const PREV_COIN_COLORS = [C.green, C.orange, C.blue, C.lilac];
 // coin colours can be chosen on the screen (office: press C) — kept in this browser, or ?colors=hex,hex,...
 export const COIN_COLORS = (() => { let l = null;
   try { const q = new URLSearchParams(location.search).get('colors'); if (q) l = q.split(',').map(h => '#' + h.replace('#', ''));
-    else l = JSON.parse(localStorage.getItem('wix20-coin-colors') || 'null'); } catch (e) {}
+    else l = JSON.parse(localStorage.getItem('wix20-coin-colors-2') || 'null'); /* -2: the 11-25 colours start fresh on every PC */ } catch (e) {}
   return (Array.isArray(l) && l.length && l.every(h => /^#[0-9a-f]{6}$/i.test(h))) ? l : DEFAULT_COIN_COLORS.slice(); })();
-export function setCoinColors(l) { COIN_COLORS.splice(0, COIN_COLORS.length, ...l); try { localStorage.setItem('wix20-coin-colors', JSON.stringify(l)); } catch (e) {} }
+export function setCoinColors(l) { COIN_COLORS.splice(0, COIN_COLORS.length, ...l); try { localStorage.setItem('wix20-coin-colors-2', JSON.stringify(l)); } catch (e) {} }
 // the art on each coin colour (white reads on all but the lilac)
 export const ART_COLORS = { [C.green]: '#ffffff', [C.orange]: '#ffffff', [C.blue]: '#ffffff', [C.lilac]: '#c46fc4' };
 export const colorFor = year => COIN_COLORS[(((+year || 2026) - 2006) % COIN_COLORS.length + COIN_COLORS.length) % COIN_COLORS.length];
@@ -27,10 +29,10 @@ export const BG = (() => { let v = null; try { v = JSON.parse(localStorage.getIt
   return { top: ok(v?.top) ? v.top : BG_DEFAULT.top, grid: ok(v?.grid) ? v.grid : BG_DEFAULT.grid }; })();
 export function setBg(o) { Object.assign(BG, o); try { localStorage.setItem('wix20-bg', JSON.stringify(BG)); } catch (e) {} }
 const mixHex = (a, b, t) => '#' + [1, 3, 5].map(i => Math.round(parseInt(a.slice(i, i + 2), 16) * (1 - t) + parseInt(b.slice(i, i + 2), 16) * t).toString(16).padStart(2, '0')).join('');
-// backdrop: flat at the top, lighter toward the bottom (Figma 9680:636: base 225,153,219 easing about a quarter of the way to #f0f0f0)
+// backdrop: lighter at the top, the chosen colour toward the bottom (Figma 9680:636 update: 235,196,232 at the top -> 232,176,227)
 export function drawBackdrop(x, W, H, ox = 0, oy = 0, FH = H) {
   const g = x.createLinearGradient(0, -oy, 0, FH - oy), b = under(BG.top);
-  for (const [at, t] of [[0, 0], [0.45, 0.023], [0.59, 0.092], [0.69, 0.15], [0.79, 0.23], [0.93, 0.276], [1, 0.276]]) g.addColorStop(at, mixHex(b, '#f0f0f0', t));
+  for (const [at, t] of [[0, 0.29], [0.3, 0.28], [0.4, 0.17], [0.5, 0.13], [0.6, 0.11], [0.7, 0.065], [0.8, 0.04], [0.9, 0], [1, 0]]) g.addColorStop(at, mixHex(b, '#f0f0f0', t));   // 11-25 update: light at the top
   x.fillStyle = g; x.fillRect(0, 0, W, H);
 }
 
@@ -46,18 +48,20 @@ export function layout(W, H) {
   return { s, box, die };
 }
 
+// the press's colours as seen on screen (Figma 9680:636, 2026-11-25 update: deeper green and orange, purple punches)
+export const PC = { green: '#0ba954', orange: '#e3650a', punch: '#b368d0', punchTop: '#8b2b9d' };
 // the press, in reference px (widths re-measured 2026-11-24: an equal gap to the frame on both sides) (absolute frame coords). cx/r: centre + half width; white: x where the lit white side starts;
 // yT/ryT: top edge + top-face ellipse (0 = hidden); yB/ryB: bottom edge + its curve. UP = the ram (moves by dy), back to front.
 const P0 = {   // re-measured off the final frame (2026-11-24): green spans the whole box; each part's white stripe ends short of its right edge (we = white end)
   UP: [
-    {cx:210,   r:50,    white:240, we:251, yT:300, yB:420, ryB:7,  col:C.blue},
-    {cx:209.5, r:141.5, white:312, we:333, yT:280, yB:326, ryB:10, col:C.orange},
-    {cx:209.5, r:161.5, white:328, we:351, yT:-400,yB:284, ryB:6,  col:C.green},
+    {cx:210,   r:50,    white:240, we:251, yT:300, yB:420, ryB:7,  col:PC.punch},
+    {cx:209.5, r:141.5, white:312, we:333, yT:280, yB:326, ryB:10, col:PC.orange},
+    {cx:209.5, r:161.5, white:328, we:351, yT:-400,yB:284, ryB:6,  col:PC.green},
   ],
   LOW: [
-    {cx:209.5, r:161.5, white:328, we:351, wT:573.5, yT:552, ryT:9, top:C.green, yB:1000, col:C.green},   // wT: the white stripe starts below the top face (Figma 9680:636)
-    {cx:209.5, r:141.5, white:312, we:333, wT:522.5, yT:520, ryT:12, top:C.orange, yB:552, ryB:16, col:C.orange},
-    {cx:210,   r:50,    white:240, we:251, yT:452, ryT:8,  top:C.blueTop, yB:517, ryB:8, col:C.blue},   // bottom curves like its top: it stands in the plate
+    {cx:209.5, r:161.5, white:328, we:351, wT:573.5, yT:552, ryT:9, top:PC.green, yB:1000, col:PC.green},   // wT: the white stripe starts below the top face (Figma 9680:636)
+    {cx:209.5, r:141.5, white:312, we:333, wT:522.5, yT:520, ryT:12, top:PC.orange, yB:552, ryB:16, col:PC.orange},
+    {cx:210,   r:50,    white:240, we:251, yT:452, ryT:8,  top:PC.punchTop, yB:517, ryB:8, col:PC.punch},   // bottom curves like its top: it stands in the plate
   ],
   OPEN: +(new URLSearchParams(location.search).get('open') ?? 0), HIT: 33,   // ram offset at rest (0 = as in the frame) / at the blow
   coinK: 0.78,             // struck coin radius / punch radius
