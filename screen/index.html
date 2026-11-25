@@ -253,6 +253,15 @@ function drawCard(i, img, sides){ const c=CARDS[i]; const jobs=[];
       if(im.__depth){ const dm=im.__depth; px.fillStyle='#000'; px.fillRect(0,0,CS,CS); px.save(); px.beginPath(); px.arc(CS/2,cy,pr,0,7); px.clip(); px.filter='grayscale(1)';
         px.drawImage(dm, CS/2-im.width*k/2, cy-pr0*0.06-im.height*k/2, im.width*k, im.height*k); px.restore(); px.filter='none';   // same place and size as the picture
         const dd=px.getImageData(0,0,CS,CS).data, D=new Uint8Array(CS*CS); for(let q=0;q<CS*CS;q++) D[q]=dd[q*4];
+        // a height map whose background is not black (grey, or a frame: the office PC makes its own) would lift the whole picture
+        // as a square: take the level along the picture's own edge as "flat", and fade the picture's last 5% to flat
+        { const W0=im.width*k, H0=im.height*k, X0=CS/2-W0/2, Y0=cy-pr0*0.06-H0/2, edge=[];
+          for(let t=0;t<1;t+=0.01) for(const [ex,ey] of [[X0+W0*t,Y0+3],[X0+W0*t,Y0+H0-4],[X0+3,Y0+H0*t],[X0+W0-4,Y0+H0*t]]){ const xi=Math.round(ex), yi=Math.round(ey);
+            if(xi>=0&&yi>=0&&xi<CS&&yi<CS && Math.hypot(xi-CS/2,yi-cy)<pr) edge.push(D[yi*CS+xi]); }
+          edge.sort((a,b)=>a-b); const flat=edge.length? edge[Math.floor(edge.length*0.6)] : 0, span=Math.max(1,255-flat), fw=Math.max(4,Math.min(W0,H0)*0.05);
+          for(let y=0;y<CS;y++) for(let x=0;x<CS;x++){ const q=y*CS+x; if(!D[q]) continue;
+            const e=Math.min(x-X0, X0+W0-x, y-Y0, Y0+H0-y), w=Math.max(0,Math.min(1,e/fw));
+            D[q]=Math.round(Math.max(0, D[q]-flat)/span*255*w*w*(3-2*w)); } }
         pc.depth=D; pc.dk=+(QP.get('dk')||6); pc.shade=+(QP.get('pshade')??0.5); pc.bump=0; }
     }
     const hd=hx.getImageData(0,0,CS,CS).data;
