@@ -15,7 +15,7 @@
 <script type="module">
 // v2 mint: a flat, graphic press (drawn in 2D, no camera, no blank fed in). Each cycle the press comes down, lifts,
 // and the struck coin is there on the lower punch; the coin itself is drawn by the wall (one 3D coin, from the die out into the wall).
-import { C, colorFor, drawBackdrop, layout, PRESS, BOX, OX } from './v2-style.js';
+import { C, colorFor, drawBackdrop, layout, PRESS, BOX, BOX_LINE, OX } from './v2-style.js';
 import { MILESTONES } from './milestones.js';
 const Q=new URLSearchParams(location.search), PANEL=Q.has('panel');
 if(PANEL) document.body.classList.add('panel');
@@ -61,7 +61,7 @@ function draw(t){
   x.setTransform(1,0,0,1,0,0);
   drawBackdrop(x, cv.width, cv.height, B.x, B.y, FH);   // opaque: the wall's coins never show through the box
   x.setTransform(s,0,0,s,-B.x,-B.y);
-  const ln=3; x.save(); x.beginPath(); x.rect(BOX.x+ln,BOX.y+ln,BOX.w-2*ln,BOX.h-2*ln); x.clip();
+  const ln=BOX_LINE; x.save(); x.beginPath(); x.rect(BOX.x+ln,BOX.y+ln,BOX.w-2*ln,BOX.h-2*ln); x.clip();
   for(const p of LOW) part(p);
   const dy=ramY(t); for(const p of UP) part(p,dy);
   impact(t);

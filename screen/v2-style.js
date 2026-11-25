@@ -25,11 +25,12 @@ export function drawBackdrop(x, W, H, ox = 0, oy = 0, FH = H) {
 }
 
 // the press box: on the right since the 2026-11-24 frame (it was at x 47; everything inside moves with it)
-export const BOX = { x: 1612, y: 167, w: 327, h: 510 }, OX = BOX.x - 47;
+// 2026-11-25 Figma: a thicker white frame (9.7 ref px), grown outward; the press inside stays put (OX fixed)
+export const BOX = { x: 1604.4, y: 160.2, w: 341.9, h: 523.8 }, BOX_LINE = 9.7, OX = 1565;
 // layout of the screen (in screen px for a W x H screen)
 export function layout(W, H) {
   const s = W / REF_W;
-  const box = { x: BOX.x * s, y: BOX.y * s, w: BOX.w * s, h: BOX.h * s, line: 3 * s };   // the press frame (outer edge of the white line)
+  const box = { x: BOX.x * s, y: BOX.y * s, w: BOX.w * s, h: BOX.h * s, line: BOX_LINE * s };   // the press frame (outer edge of the white line)
   // the struck coin sits on the lower punch: its top face centre, and the coin radius (= punch radius)
   const die = { x: (208 + OX) * s, y: 452 * s, r: 48 * s, coinR: 48 * s * PRESS.coinK };
   return { s, box, die };
