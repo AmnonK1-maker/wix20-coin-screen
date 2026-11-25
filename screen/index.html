@@ -449,7 +449,8 @@ function strikePlan(){ const s=LAY.s, bx=LAY.box.x, D=D0(), k=+(QP.get('present'
   const upMin=(PRESS.UP[1].yB+PRESS.OPEN+14)*s;                                       // keep clear of the raised ram
   const p0=[LAY.die.x, LAY.die.y-coinH()/2], p1=[bx-Rp*(+(QP.get('over')||0.3)), Math.max(upMin+Rp, LAY.die.y-45*s)];   // one fixed spot, a good part of it over the box
   const p2=[P(W*0.48,W*0.7), P(H*0.28,H*0.72)];   // joins the wall near the middle, not far off (it read as running away)
-  const tr=0.95, tb=tr+1.6, tc=tb+P(0.2,0.4), td=tc+P(1.1,1.3), te=td+P(0.5,0.7), tf=te+P(2.0,2.4);
+  const HOLD=+(QP.get('hold')??1.5);   // Amnon 2026-11-25: the struck coin stands facing us this much longer, to read the year and its line
+  const tr=0.95, tb=tr+1.6, tc=tb+HOLD+P(0.2,0.4), td=tc+P(1.1,1.3), te=td+P(0.5,0.7), tf=te+P(2.0,2.4);
   return { p0, p1, p2, D, Dp, d2:DMIN+P(1,4.5), tr, tb, tc, td, te, tf, turn:sgn()*Math.PI, lift:20*s,
     a2:P(30,150), b2:sgn()*P(0.8,2.2), r2:P(-1,1), ph:Math.random()*6.28, k2:0.35 }; }
 // pose at time t -> [px, py, d, a (face tilt toward us, deg; 0 = lying flat), b (turn about screen-up), roll]

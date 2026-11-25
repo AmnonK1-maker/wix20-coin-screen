@@ -16,7 +16,7 @@
 <script type="module">
 // v2 mint: a flat, graphic press (drawn in 2D, no camera, no blank fed in). Each cycle the press comes down, lifts,
 // and the struck coin is there on the lower punch; the coin itself is drawn by the wall (one 3D coin, from the die out into the wall).
-import { C, colorFor, drawBackdrop, layout, PRESS, BOX, BOX_LINE, OX, under, BG } from './v2-style.js';
+import { C, colorFor, drawBackdrop, layout, PRESS, BOX, BOX_LINE, OX, under, BG, BG_DEFAULT } from './v2-style.js';
 import { MILESTONES } from './milestones.js';
 const Q=new URLSearchParams(location.search), PANEL=Q.has('panel');
 if(PANEL) document.body.classList.add('panel');
@@ -35,7 +35,10 @@ const {UP, LOW, OPEN, HIT}=PRESS;
 // come out as the Figma's (green 37,190,114 / orange 252,117,13 / blue 72,130,232) once the overlay is on
 const UNDER=Q.has('raw')? (h=>h) : under;
 addEventListener('message', e=>{ if(e.data?.type==='bg' && e.data.bg) Object.assign(BG, e.data.bg); });   // office: press C, background colour
-function capOf(p,yT){ x.beginPath(); x.ellipse(p.cx,yT,p.r,p.ryT,0,0,Math.PI*2); x.fillStyle=UNDER(p.top); x.fill(); }
+function capOf(p,yT){
+  if(p.capIn){ x.beginPath(); x.ellipse(p.cx,yT,p.r,p.ryT,0,0,Math.PI*2); x.fillStyle=UNDER(p.col); x.fill();   // the rim: the punch's own colour
+    x.beginPath(); x.ellipse(p.cx,yT,p.capIn.rx,p.capIn.ry,0,0,Math.PI*2); x.fillStyle=UNDER(p.top); x.fill(); return; }
+  x.beginPath(); x.ellipse(p.cx,yT,p.r,p.ryT,0,0,Math.PI*2); x.fillStyle=UNDER(p.top); x.fill(); }
 function part(p, dy=0){   // the ram's grain follows it (dy)
   const yT=p.yT+dy, yB=p.yB+dy, l=p.cx-p.r, rr=p.cx+p.r;
   x.beginPath(); x.moveTo(l,yT);
@@ -62,7 +65,7 @@ function satin(path, dy){ if(GK<=0) return;
   GRN.setTransform(new DOMMatrix().translate(0,dy).scale(1/s)); x.fillStyle=GRN; x.fillRect(BOX.x-20,BOX.y-60,BOX.w+40,BOX.h+120); x.restore(); }
 // one cycle (s): rest up, down, strike, up; the coin shows as the ram clears it, then leaves (wall)
 // the coin is made at the blow (hidden inside the closed punches) and shows as the ram lifts off it
-const T={down:[0.9,1.15], hold:[1.15,1.32], up:[1.32,2.3], appear:1.15, end:+(Q.get('cycle')||6)};
+const T={down:[0.9,1.15], hold:[1.15,1.32], up:[1.32,2.3], appear:1.15, end:+(Q.get('cycle')||7.5)};   // 7.5 s: 6 + the struck coin's longer stand (index.html HOLD)
 const sm=t=>t*t*(3-2*t), clamp=(v,a=0,b=1)=>Math.min(b,Math.max(a,v)), seg=(t,a,b)=>clamp((t-a)/(b-a));
 function ramY(t){
   if(t<T.down[0]) return OPEN;
@@ -118,7 +121,7 @@ function build(){
   drawBackdrop(x, cv.width, cv.height, B.x, B.y, FH);   // opaque: the wall's coins never show through the box
   x.setTransform(s,0,0,s,-B.x,-B.y);
   x.save(); x.beginPath(); x.rect(BOX.x+ln,BOX.y+ln,BOX.w-2*ln,BOX.h-2*ln); x.clip();
-  if(BG.top.toLowerCase()==='#e8b0e3'){ x.fillStyle='rgba(224,139,217,0.18)'; x.fillRect(BOX.x,BOX.y,BOX.w,BOX.h); }   // Figma 9680:636: the box's own pink panel, a touch deeper than the wall
+  if(BG.top.toLowerCase()===BG_DEFAULT.top.toLowerCase()){ x.fillStyle='rgba(224,139,217,0.18)'; x.fillRect(BOX.x,BOX.y,BOX.w,BOX.h); }   // Figma 9680:636: the box's own pink panel, a touch deeper than the wall
   for(const p of LOW) part(p);
   pressArt(0,'text');
   x.restore();
